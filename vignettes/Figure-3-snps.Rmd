@@ -1,0 +1,19 @@
+---
+title: "Figure-3-snps"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Figure-3-snps}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(demuxSNP-paper-figures)
+```

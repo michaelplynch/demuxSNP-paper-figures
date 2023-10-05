@@ -1,0 +1,19 @@
+---
+title: "Figure-4-application"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Figure-4-application}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(demuxSNP-paper-figures)
+```
