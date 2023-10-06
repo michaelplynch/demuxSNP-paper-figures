@@ -16,4 +16,15 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(demuxSNP-paper-figures)
+library(demuxSNP)
+library(SingleCellExperiment)
+library(Seurat)
+library(demuxmix)
 ```
+
+
+````{r}
+
+source("../R/hto_sim.R")
+
+````
