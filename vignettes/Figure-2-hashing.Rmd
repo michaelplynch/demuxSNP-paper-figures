@@ -21,7 +21,7 @@ library(SingleCellExperiment)
 library(Seurat)
 library(demuxmix)
 ```
-
+## hashing based demultiplexing performance decreases with hashing quality:
 
 ````{r}
 
