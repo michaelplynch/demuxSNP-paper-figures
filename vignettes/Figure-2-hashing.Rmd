@@ -21,10 +21,21 @@ library(SingleCellExperiment)
 library(Seurat)
 library(demuxmix)
 ```
-## hashing based demultiplexing performance decreases with hashing quality:
 
 ````{r}
 
 source("../R/hto_sim.R")
 
 ````
+
+## hashing based demultiplexing performance decreases with hashing quality:
+
+
+
+
+## Misassigned cells generally fall between signal and background peak:
+
+
+
+
+## Combined hashing and SNPs approachs performs better than standalone hashing algorithms.
