@@ -1,0 +1,36 @@
+---
+title: "pbmc_4x_preproc"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{pbmc_4x_preproc}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(demuxSNPpaperfigures)
+library(SingleCellExperiment)
+library(scater)
+library(Matrix)
+```
+
+
+## Data loading
+
+
+````{r}
+
+path=c("data/demuxSNP/data/")
+
+matarix<-
+barcodes<-
+features<-
+
+````
