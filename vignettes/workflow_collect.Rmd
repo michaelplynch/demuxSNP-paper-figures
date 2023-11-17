@@ -1,8 +1,8 @@
 ---
-title: "Figure-3-snps"
+title: "collect_soup_results"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Figure-3-snps}
+  %\VignetteIndexEntry{pbmc_4x_preproc}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -15,21 +15,38 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup}
-
 library(demuxSNPpaperfigures)
-
-```
-
-
-````{r}
-
-
-
+library(SingleCellExperiment)
+library(scater)
+library(Matrix)
+library(demuxmix)
+library(demuxSNP)
+library(dittoSeq)
 ````
 
 
 
-## Functions
+````{r}
+
+n=c(10,10,10,10)
+ds=c(2500,500,250,125)
+key=c("a","b","c","d")
+
+doub10ari<-collect(ndoub=n,ds=ds,key=key)
+doub20ari<-collect(ndoub=rep(20,4),ds=ds,key=c("e","f","g","h"))
+doub30ari<-collect(ndoub=rep(30,4),ds=ds,key=c("i","j","k","l"))
+doub40ari<-collect(ndoub=rep(40,4),ds=ds,key=c("m","n","o","p"))
+doub50ari<-collect(ndoub=rep(50,4),ds=ds,key=c("q","r","s","t"))
+
+plot(ds,doub10ari,xlab="smallest group size")
+plot(ds,doub40ari,xlab="smallest group size")
+````
+
+````{r fig.width=5,fig.height=6}
+
+plot(n,ari_n,xlab="% doublets")
+
+````
 
 ````{r}
 

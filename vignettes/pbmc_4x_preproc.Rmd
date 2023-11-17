@@ -19,6 +19,7 @@ library(demuxSNPpaperfigures)
 library(SingleCellExperiment)
 library(scater)
 library(Matrix)
+library(demuxmix)
 ```
 
 
@@ -27,10 +28,51 @@ library(Matrix)
 
 ````{r}
 
-path=c("data/demuxSNP/data/")
+path=c("/data/demuxSNP/data/processed/pbmc_data_4x_out/outs/filtered_feature_bc_matrix")
 
-matarix<-
-barcodes<-
-features<-
+matrix<-readMM(paste(path,"/matrix.mtx.gz",sep=""))
+barcodes<-read.table(paste(path,"/barcodes.tsv.gz",sep=""))
+features<-read.table(paste(path, "/features.tsv.gz",sep=""))
+
+rownames(matrix)<-features$V2
+colnames(matrix)<-barcodes$V1
+
+rna<-matrix[features$V3=="Gene",]
+hto<-matrix[features$V3=="Multiplexing",]
+
+se_hto<-SummarizedExperiment(assays = list(counts = hto))
+sce<-SingleCellExperiment(list(counts=rna))
+altExp(sce,"HTO")<-se_hto
+mainExpName(sce)<-"RNA"
+sce
+````
+
+
+````{r}
+
+dmm<-demuxmix(hto=as.matrix(hto),rna=colSums(rna))
+pAcpt(dmm) <- 0.99
+classLabels <- dmmClassify(dmm)
+
+
+table(classLabels$HTO)
+
+````
+
+````{r}
+path=c("/data/demuxSNP/data/processed/sim_groundtruth/")
+set.seed(1)
+for (i in seq_along(rownames(hto))) {
+  hashtag<-rownames(hto)[i]
+  barcodes<-colnames(rna)[classLabels$HTO==hashtag]
+  index<-sample(length(barcodes),50)
+  print(length(index))
+  print(head(index))
+  write.table(barcodes[index],
+              file=paste(path,hashtag,"_50_barcodes.tsv",sep=""),
+              col.names = FALSE,
+              row.names = FALSE,
+              quote=FALSE)
+}
 
 ````

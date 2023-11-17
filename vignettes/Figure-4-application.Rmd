@@ -16,6 +16,7 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(demuxSNPpaperfigures)
+library(CiteFuse)
 ```
 
 
@@ -40,13 +41,17 @@ sce_app$percent_mito<-df$subsets_Mito_percent
 
 
 ````{r}
+library(CiteFuse)
+sce_app<-normaliseExprs(sce=sce_app,altExp_name = "HTO",transform="log")
+sce_app<-crossSampleDoublets(sce_app)
+
 library(Seurat)
 seurat_app<-as.Seurat(sce_app,data=NULL)
 seurat_app <- NormalizeData(seurat_app, assay = "HTO", normalization.method = "CLR")
 seurat_app <- HTODemux(seurat_app, assay = "HTO", positive.quantile = 0.99)
 
 table(seurat_app$hash.ID)
-
+table(sce_app$doubletClassify_between_label,seurat_app$hash.ID)
 #s2<-seurat_app[,seurat_app$nCount_RNA>1000 & seurat_app$percent_mito<10]
 #s2<-HTODemux(s2, assay= "HTO")
 #table(s2$hash.ID)
@@ -59,7 +64,7 @@ df2<-as.data.frame(df[seurat_app$hash.ID=="Negative",])
 library(ggpubr)
 plots<-ggscatterhist(df2,x="sum",y="detected", title = "Quality metrics distributions for 'Negative' group") 
 plots$sp <- plots$sp +
-    geom_hline(yintercept = 750, linetype = "dashed", color = "blue") +
+    geom_hline(yintercept = 1000, linetype = "dashed", color = "blue") +
   geom_vline(xintercept = 1500, linetype = "dashed", color = "red")
 plots
 
@@ -68,4 +73,28 @@ high_qual<-df2$sum>1500 & df2$detected>750
 table(high_qual)
 
 barplot(table(high_qual))
+````
+
+ alluvial plots https://enblacar.github.io/SCpubr-book-v1/13-AlluvialPlot.html
+
+````{r}
+
+
+
+````
+
+
+````{r fig.height=6,fig.width=15}
+sample<-seurat_app
+library(dplyr)
+library(SCpubr)
+p1 <- SCpubr::do_AlluvialPlot(sample = sample,
+                            first_group = "hash.ID",
+                            last_group = "doubletClassify_between_label",
+                            flip=TRUE)
+
+
+
+p1
+table(seurat_app$hash.ID,seurat_app$doubletClassify_between_label)
 ````

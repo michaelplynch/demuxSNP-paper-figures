@@ -20,6 +20,7 @@ library(demuxSNP)
 library(SingleCellExperiment)
 library(Seurat)
 library(demuxmix)
+
 ```
 
 ````{r}
@@ -28,14 +29,78 @@ source("../R/hto_sim.R")
 
 ````
 
+````{r}
+
+mat<-logimat(6,nsinglet=rep(500,6), ndoub = 500, nneg=50)
+size_sig=rep(10,4)
+size_bg=rep(10,4)
+mu_sig=rep(30,4)
+mu_bg=rep(5,4)
+counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_bg = mu_bg, mat = mat, seed = 1)
+
+dim(counts)
+
+plot_hashtag
+````
+
+````{r}
+
+set.seed(2)
+z<-matrix(0,nrow=6,ncol=dim(broad.sce.sim)[2])
+for (i in 1:6) {
+  names<-c("K1","K2","K3","K4","K5","K6")
+  n<-names[i]
+  z[i,broad.sce.sim$truth==n]<-1
+  
+}
+
+nsinglet=as.vector(table(broad.sce.sim$truth[broad.sce.sim$truth!="Doublet"]))[1:6]
+ngroups=6
+ndoub=sum(broad.sce.sim$truth=="Doublet")
+doub<-matrix(0,nrow=ngroups,ncol=ndoub)
+  prob=proportions(nsinglet)
+  ind<-replicate(n=ndoub,sample(seq_len(ngroups),size=2,prob=prob))
+  for (j in seq_len(ndoub)) {
+    doub[ind[,j],j]<-1
+  }
+z[,broad.sce.sim$truth=="Doublet"]<-doub
+
+size_sig=rep(10,6)
+size_bg=rep(7,6)
+mu_sig=c(500,500,400,500,200,400)
+mu_bg=c(110,120,90,100,60,80)
+
+counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_bg = mu_bg, mat = z)
+
+
+
+
+````
+
+
 ## hashing based demultiplexing performance decreases with hashing quality:
 
+````{r}
 
+
+
+````
 
 
 ## Misassigned cells generally fall between signal and background peak:
 
+````{r}
+
+
+````
 
 
 
 ## Combined hashing and SNPs approachs performs better than standalone hashing algorithms.
+
+
+````{r}
+
+
+
+````
