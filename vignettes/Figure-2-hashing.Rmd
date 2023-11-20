@@ -55,14 +55,18 @@ do.call(grid.arrange,c(plot,nrow=1))
 ````{r fig.width=12,fig.height=3}
 
 mat<-logimat(6,nsinglet=c(100,200,1000,400,500,800), ndoub = 500, nneg=50)
+# size_sig=rep(10,6)
+# size_bg=rep(20,6)
+# mu_sig=rep(50,6)
+# mu_bg=rep(5,6)
 size_sig=rep(10,6)
-size_bg=rep(20,6)
-mu_sig=rep(50,6)
-mu_bg=rep(5,6)
+size_bg=rep(7,6)
+mu_sig=c(500,500,400,500,200,400)
+mu_bg=c(110,120,90,100,60,80)
 counts_low<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_bg = mu_bg, mat = mat, seed = 1)
 
 dim(counts_low)
-truth<-colnames(counts_low)
+truth_low<-colnames(counts_low)
 df<-data.frame(t(counts_low))
 plot<-plot_hashtag(df,ylim=c(0,2000))
 do.call(grid.arrange,c(plot,nrow=1))
@@ -73,32 +77,54 @@ do.call(grid.arrange,c(plot,nrow=1))
 library(cellhashR)
 colnames(counts)<-seq_len(dim(counts)[2])
 chr<-GenerateCellHashingCalls(counts,
-                              methods=c("htodemux","bff_raw","bff_cluster","dropletutils"),
+                              methods=c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq"),
                               doTSNE = FALSE)
 
-seurat_high<-CreateSeuratObject(counts=counts,assay="HTO")
-seurat_high<-NormalizeData(seurat_high,normalization.method ="CLR")
-seurat_high<-HTODemux(seurat_high)
-
-#sce_high<-SingleCellExperiment()
-
+chr<-chr[order(as.numeric(chr$cellbarcode)),]
 chr$gt<-truth
+
+colnames(counts_low)<-seq_len(dim(counts_low)[2])
+chr_low<-GenerateCellHashingCalls(counts_low,
+                              methods=c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq"),
+                              doTSNE = FALSE)
+
+chr_low<-chr_low[order(as.numeric(chr_low$cellbarcode)),]
+chr_low$gt<-truth_low
+
 library(caret)
 methods=c("htodemux","bff_cluster","bff_raw")
-
-for (i in seq_along(methods[1])) {
+df_full<-data.frame()
+for (i in seq_along(methods)) {
   m<-methods[i]
   data_ch=chr[[m]]
   ref_ch=chr[['gt']]
   data_fac<-factor(data_ch,union(data_ch,ref_ch))
   ref_fac<-factor(ref_ch,union(data_ch,ref_ch))
   cf<-confusionMatrix(data=data_fac,reference=ref_fac)
-  print(cf)
+  recall<-cf$byClass[,5]
+  precision<-cf$byClass[,6]
+  df<-data.frame(class=rownames(cf$byClass),data='high',method=m,precision=precision,recall=recall)
+  df_full<-rbind(df_full,df)
 }
-table(data_ch,ref_ch)
 
-table(chr$htodemux,seurat_high$hash.ID)
 
+
+for (i in seq_along(methods)) {
+  m<-methods[i]
+  data_ch=chr_low[[m]]
+  ref_ch=chr_low[['gt']]
+  data_fac<-factor(data_ch,union(data_ch,ref_ch))
+  ref_fac<-factor(ref_ch,union(data_ch,ref_ch))
+  cf<-confusionMatrix(data=data_fac,reference=ref_fac)
+  recall<-cf$byClass[,5]
+  precision<-cf$byClass[,6]
+  df<-data.frame(class=rownames(cf$byClass),data='low',method=m,precision=precision,recall=recall)
+  df_full<-rbind(df_full,df)
+}
+
+
+ggbarplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data",position=position_dodge())
+ggboxplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data", label='class',label.select = list(top.down = 1))
 ````
 
 ````{r}
