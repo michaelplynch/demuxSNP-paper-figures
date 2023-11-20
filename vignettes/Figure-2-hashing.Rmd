@@ -32,6 +32,8 @@ source("../R/hto_sim.R")
 source("../R/plot_hashtag.R")
 ````
 
+# hashing based demultiplexing performance decreases with hashing quality:
+
 ## high qual 
 
 ````{r fig.width=12,fig.height=3}
@@ -127,21 +129,7 @@ ggbarplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="dat
 ggboxplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data", label='class',label.select = list(top.down = 1))
 ````
 
-````{r}
 
-set.seed(1)
-mu1<-400
-mu2<-20
-mat<-logimat(ngroups=4,nsinglet=c(2000,1000,3200,150),ndoub=1000,nneg=200)
-counts<-draw_counts(size_sig=2.5,size_bg = c(2.5,2.5,2,2.5),mu_sig = c(mu1*1.2,mu1*0.9,mu1*0.7,mu1*0.9),mu_bg = c(mu2,mu2,mu2,mu2),mat=mat,seed=1)
-hto<-SingleCellExperiment(list(counts=counts))
-colnames(counts)<-seq_len(dim(counts)[2])
-seurat<-CreateSeuratObject(counts=counts,assay="HTO")
-seurat<-NormalizeData(seurat,normalization.method ="CLR")
-seurat$hashtag<-as.factor(colnames(counts))
-seurat<-HTODemux(seurat)
-
-````
 
 ````{r}
 
@@ -175,7 +163,7 @@ counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_
 ````
 
 
-## hashing based demultiplexing performance decreases with hashing quality:
+
 
 ````{r}
 
