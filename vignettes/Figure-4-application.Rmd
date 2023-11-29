@@ -98,3 +98,42 @@ p1 <- SCpubr::do_AlluvialPlot(sample = sample,
 p1
 table(seurat_app$hash.ID,seurat_app$doubletClassify_between_label)
 ````
+
+
+
+````{r}
+sce<-sce_app
+altExp(sce,"HTO")<-as(altExp(sce,"HTO"), "SingleCellExperiment")
+library(Matrix)
+library(demuxSNP)
+mat<-as.matrix(readMM('../data/v_outs_full.mtx'))
+sce<-add_snps(sce,mat=mat)
+sce<-high_conf_calls(sce)
+sce<-reassign(sce)
+
+sce$hash.ID<-seurat_app$hash.ID
+soup<-read.table(file="../data/clusters.tsv", sep='\t',header=TRUE)
+soup$assignment[soup$status=="doublet"]<-"Doublet"
+soup$assignment[soup$status=="unassigned"]<-"unassigned"
+sce$soup<-soup$assignment
+
+table(sce$knn)
+table(sce$hash.ID)
+table(sce$soup)
+
+table(sce$soup,sce$knn)
+
+sce$soup_rc<-recode(sce$soup,
+                    "0"="Hashtag1",
+                    "1"="Hashtag5",
+                    "2"="Hashtag6",
+                    "3"="Hashtag3",
+                    "4"="Hashtag4",
+                    "5"="Hashtag2")
+
+table(sce$soup_rc,sce$knn)
+````
+
+
+
+

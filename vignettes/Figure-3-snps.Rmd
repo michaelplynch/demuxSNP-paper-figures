@@ -21,11 +21,6 @@ library(demuxSNPpaperfigures)
 ```
 
 
-````{r}
-
-
-
-````
 
 
 
@@ -33,7 +28,7 @@ library(demuxSNPpaperfigures)
 
 ````{r}
 
-collect<-function(ndoub,ds,key) {
+collect_soup<-function(ndoub,ds,key) {
   library(readr)
   library(dplyr)
   library(caret)
@@ -89,6 +84,47 @@ collect<-function(ndoub,ds,key) {
 return(res)
 }
 
+collect_demuxsnp<-function(ndoub,ds,key) {
+  library(readr)
+  library(dplyr)
+  library(caret)
+  library(mclust)
+  n<-ndoub
+  ari_n<-c(); recall_n<-c();precision_n<-c()
+  
+  for (i in seq_along(key)) {
+  ## ground truth
+  lookup<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
+  doublet_barcodes<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
+  label<-substr(doublet_barcodes$barcode,start=18,stop=19)
+  label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+  
+  ## souporcell results
+  demuxsnp<-read.table(file=paste("/data/scratch/nextflow/ccrcc_out/demuxSNP_",key[i],"/",key[i],"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+  
+  t<-table(label,demuxsnp$demuxSNP)
+
+  ds_reorder<-demuxsnp$demuxSNP[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
+  ds_recode<-gsub("Hashtag","K",ds_reorder)
+  print(table(label))
+ 
+  ## evaluate performance
+  data=factor(ds_recode, levels=sort(union(ds_recode,label)))
+  ref=factor(label, levels=sort(union(ds_recode,label)))
+  ari<-adjustedRandIndex(data,ref)
+  cf<-confusionMatrix(data=data,reference=ref)
+  prec<-cf$byClass[3,5]
+  rec<-cf$byClass[3,6]
+  print(ari)
+  ari_n[i]<-ari
+  recall_n[i]<-rec
+  precision_n[i]<-prec
+  print(key[i])
+  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n)
+}
+return(res)
+}
+
 ````
 
 
@@ -99,13 +135,139 @@ n=c(5,10,15,20,25,30,35,40,45,50)
 ds=c(2500,500,250,125)
 key=c("a","b","c","d","e","f","g","h","i","j")
 
-ccrcc_ari<-collect(ndoub=n,ds=ds,key=key)
+ccrcc_ari<-collect_soup(ndoub=n,ds=ds,key=key)
 
 plot(n,ccrcc_ari$precision,xlab="doublet rate")
 library(ggpubr)
-df_p=data.frame(key=key,doublets=n,metric=ccrcc_ari$precision,type="precision")
-df_r=data.frame(key=key,doublets=n,metric=ccrcc_ari$recall,type="recall")
+df_p=data.frame(key=key,doublets=n,metric=ccrcc_ari$precision,type="precision",algorithm="souporcell")
+df_r=data.frame(key=key,doublets=n,metric=ccrcc_ari$recall,type="recall",algorithm="souporcell")
 df<-rbind(df_p,df_r)
 ggline(data=df, x="doublets", y="metric", linetype="type", xlab = "% doublets")
 ````
 
+
+````{r}
+
+n=c(5,10,15,20,25,30,35,40,45,50)
+ds=c(2500,500,250,125)
+key=c("a","b","c","d","e","f","g","h","i","j")
+
+ccrcc_demuxsnp<-collect_demuxsnp(ndoub=n,ds=ds,key=key)
+
+plot(n,ccrcc_demuxsnp$precision,xlab="doublet rate")
+library(ggpubr)
+df_p=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$precision,type="precision",algorithm="demuxSNP")
+df_r=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$recall,type="recall",algorithm="demuxSNP")
+df_demuxsnp<-rbind(df_p,df_r)
+ggline(data=df_demuxsnp, x="doublets", y="metric", linetype="type", xlab = "% doublets")
+
+````
+
+````{r}
+
+df_all<-rbind(df,df_demuxsnp)
+head(df_all)
+df_all$split<-paste(df_all$type,df_all$algorithm,sep="")
+ggline(data=df_all, x="doublets", y="metric", linetype="algorithm", xlab = "% doublets",color="algorithm",facet.by="type")
+````
+
+````{r}
+key="h"
+n=40
+
+#load ground truth
+  lookup<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
+  doublet_barcodes<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/barcodes_merged_pbmc_",key,"_", n, "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
+  label<-substr(doublet_barcodes$barcode,start=18,stop=19)
+  label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+# load demuxsnp from key
+demuxsnp<-read.table(file=paste("/data/scratch/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+ds_reorder<-demuxsnp$demuxSNP[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
+ds_recode<-gsub("Hashtag","K",ds_reorder)
+
+#load souporcell from key
+
+souporcell<-read.table(file=paste("/data/scratch/nextflow/ccrcc_out/pbmc_",key,"_",n,"/clusters.tsv",sep=""), sep='\t',header=TRUE)
+souporcell$assignment[souporcell$status=="doublet"]<-"Doublet"
+souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
+
+  ## recode souporcell labels (need to add if else to handle souporcell missing a cluster)
+  t<-table(label,souporcell$assignment)
+  k<-t[grep("[0-9]",rownames(t)),grep("[0-9]",colnames(t))]
+  kp<-proportions(k+1,1)
+
+  m<-max.col(kp)
+  vals<-kp[cbind(seq_along(m),m)]
+  m[which.min(vals)]<-c(setdiff(seq_along(m),m[-c(which.min(vals))]))
+
+  y<-rownames(kp)
+  z<-colnames(kp)[m]
+  w<-as.character(z)
+  names(w)<-as.character(y)
+  soup_new<-recode(souporcell$assignment,!!!setNames(y,z))
+
+labels2<-factor(label,levels=unique(c(label,ds_recode,soup_new)))
+
+#demuxSNP
+ds_factor<-factor(ds_recode,levels=union(label,ds_recode))
+cf<-confusionMatrix(data=ds_factor,reference=labels2)
+cf$byClass[,5:6]
+cf_demuxSNP<-as.data.frame(cf$byClass[,5:6])
+cf_demuxSNP$algorithm<-"demuxSNP"
+cf_demuxSNP$group<-gsub("Class: ","",rownames(cf_demuxSNP))
+
+#souporcell
+soup_factor<-factor(soup_new,levels=union(label,soup_new))
+cf<-confusionMatrix(data=soup_factor,reference=labels2)
+cf$byClass[,5:6]
+cf_soup<-as.data.frame(cf$byClass[,5:6])
+cf_soup$algorithm<-"souporcell"
+cf_soup$group<-gsub("Class: ","",rownames(cf_soup))
+
+compar<-rbind(cf_demuxSNP,cf_soup)
+compar<-compar[c(grep("K",compar$group), grep("Doublet",compar$group)),]
+compar$group<-factor(compar$group,levels=c("K1","K2","K3","K4","K5","K6","Doublet"))
+
+
+ggscatter(compar,x='Recall',y='Precision',color = 'algorithm',shape='group',label='group',palette = dittoColors(),size=4,legend="right",ellipse=TRUE,ellipse.type = "convex")+ xlim(0,1)+ylim(0,1)
+
+ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0,1)+ylim(0,1)
+
+ggboxplot(compar,x='algorithm',y='Precision', add = c("mean_se", "jitter"),color="algorithm", label='group',repel=TRUE)
+
+ggboxplot(compar,x='algorithm',y='Recall', add = c("mean_se", "jitter"),color="algorithm", label='group',repel=TRUE)
+
+
+````
+
+
+
+````{r}
+s1<-soup_factor
+s2<-soup_factor==labels2
+t<-reshape2::melt(table(s1,s2))
+df<-data.frame(group=t$s1,correct=t$s2,count=t$value)
+df$group<-factor(df$group,levels=c("K1","K2","K3","K4","K5","K6","Doublet"))
+df<-df[!is.na(df$group),]
+ggbarplot(df,x='group',y='count',fill = "correct" ,legend="right",orientation = "horiz",palette = c("white","black")) +ylab("# cells")
+
+````
+
+
+
+````{r fig.height=3,fig.width=10}
+
+library(ggalluvial)
+df<-data.frame(soup=soup_factor,truth=labels2)
+df<-as.data.frame(table(soup_factor,labels2))
+df$result<-c(df$soup_factor==df$labels2)
+ggplot(data = df,
+       aes(axis1 = soup_factor, axis2 = labels2, y = Freq)) +
+  geom_alluvium(aes(fill = result)) +
+  geom_stratum() +
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Souporcell assignment", "Ground truth"),
+                   expand = c(0.15, 0.05)) +
+   coord_flip()
+````

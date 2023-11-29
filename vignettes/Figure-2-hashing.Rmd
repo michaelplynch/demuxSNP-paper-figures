@@ -38,7 +38,7 @@ source("../R/plot_hashtag.R")
 
 ````{r fig.width=12,fig.height=3}
 
-mat<-logimat(6,nsinglet=rep(500,6), ndoub = 500, nneg=50)
+mat<-logimat(6,nsinglet=rep(1000,6), ndoub = 1500, nneg=500)
 size_sig=rep(10,6)
 size_bg=rep(10,6)
 mu_sig=rep(50,6)
@@ -56,23 +56,50 @@ do.call(grid.arrange,c(plot,nrow=1))
 
 ````{r fig.width=12,fig.height=3}
 
-mat<-logimat(6,nsinglet=c(100,200,1000,400,500,800), ndoub = 500, nneg=50)
+# mat<-logimat(6,nsinglet=c(100,200,1000,400,500,800), ndoub = 500, nneg=50)
+# # size_sig=rep(10,6)
+# # size_bg=rep(20,6)
+# # mu_sig=rep(50,6)
+# # mu_bg=rep(5,6)
 # size_sig=rep(10,6)
-# size_bg=rep(20,6)
-# mu_sig=rep(50,6)
-# mu_bg=rep(5,6)
-size_sig=rep(10,6)
-size_bg=rep(7,6)
-mu_sig=c(500,500,400,500,200,400)
-mu_bg=c(110,120,90,100,60,80)
-counts_low<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_bg = mu_bg, mat = mat, seed = 1)
+# size_bg=rep(7,6)
+# mu_sig=c(500,500,400,500,200,400)
+# mu_bg=c(110,120,90,100,60,80)
+# counts_low<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_bg = mu_bg, mat = mat, seed = 1)
+# 
+# dim(counts_low)
+# truth_low<-colnames(counts_low)
+# df<-data.frame(t(counts_low))
+# plot<-plot_hashtag(df,ylim=c(0,2000))
+# do.call(grid.arrange,c(plot,nrow=1))
 
-dim(counts_low)
-truth_low<-colnames(counts_low)
-df<-data.frame(t(counts_low))
-plot<-plot_hashtag(df,ylim=c(0,2000))
-do.call(grid.arrange,c(plot,nrow=1))
+load("/data/scratch/nextflow/ccrcc_out/demuxSNP_e/e_final_sce.rdata")
+hto_j<-counts(altExp(sce,"HTO"))
+dim(hto_j)
+df_j<-data.frame(t(hto_j))
+plot_j<-plot_hashtag(df_j,ylim=c(0,2500))
+do.call(grid.arrange,c(plot_j,nrow=1))
+
+counts_low<-hto_j
+library(stringr)
+sce$truth<-str_replace(sce$truth,"K","Hashtag")
+truth_low<-sce$truth
+
+table(sce$truth)
 ````
+
+````{r}
+
+split<-c(chr_low$gt=="Hashtag5" & chr_low$htodemux!="Hashtag5")
+hto_jnorm<-NormalizeData(counts_low)
+df_j<-data.frame(t(hto_jnorm))
+plot_hashtag(df_j,split=split)
+
+
+````
+
+
+
 
 ````{r}
 
@@ -124,15 +151,18 @@ for (i in seq_along(methods)) {
   df_full<-rbind(df_full,df)
 }
 
-
+df_full<-df_full[!is.na(df_full$precision),]
+## barplot
 ggbarplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data",position=position_dodge())
+ggbarplot(df_full,x='method',y='precision', add = c("mean_se", "jitter"),color="data",position=position_dodge())
+
 ggboxplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data", label='class',label.select = list(top.down = 1))
+ggboxplot(df_full,x='method',y='precision', add = c("mean_se", "jitter"),color="data", label='class',label.select = list(top.down = 1))
 ````
 
 
 
-````{r}
-
+````{r eval=FALSE}
 set.seed(2)
 z<-matrix(0,nrow=6,ncol=dim(broad.sce.sim)[2])
 for (i in 1:6) {
@@ -167,8 +197,58 @@ counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_
 
 ````{r}
 
+dmm<-demuxmix(hto=counts_low,model="naive")
+pAcpt(dmm) <- 0
+dmmlabels<-dmmClassify(dmm)
+dmmlabels$HTO[dmmlabels$Type=="negative"]<-"Negative"
+dmmlabels$HTO[dmmlabels$Type=="multiplet"]<-"Doublet"
+table(dmmlabels$HTO)
+table(dmmlabels$HTO,sce$truth)
+sum(dmmlabels$HTO==sce$truth)/length(dmmlabels$HTO)
+sce$dmm<-dmmlabels$HTO
+
+#demuxSNP
+
+sce$knn<-factor(sce$knn,levels=c(levels(sce$knn),"Negative"))
+sce$truth<-factor(sce$truth,levels=levels(sce$knn))
+cf<-confusionMatrix(data=sce$knn,reference=sce$truth)
+cf$byClass[,5:6]
+cf_demuxSNP<-as.data.frame(cf$byClass[,5:6])
+cf_demuxSNP$algorithm<-"demuxSNP"
+cf_demuxSNP$group<-gsub("Class: ","",rownames(cf_demuxSNP))
+
+#demuxmix
+sce$dmm<-as.factor(sce$dmm)
+cf<-confusionMatrix(data=sce$dmm,reference=sce$truth)
+cf$byClass[,5:6]
+cf_demuxmix<-as.data.frame(cf$byClass[,5:6])
+cf_demuxmix$algorithm<-"demuxmix"
+cf_demuxmix$group<-gsub("Class: ","",rownames(cf_demuxmix))
+
+compar<-rbind(cf_demuxSNP,cf_demuxmix)
+compar<-compar[c(grep("Hashtag",compar$group), grep("Doublet",compar$group)),]
+compar$group<-factor(compar$group,levels=c("Hashtag1","Hashtag2","Hashtag3","Hashtag4","Hashtag5","Hashtag6","Doublet"))
+ggscatter(compar,x='Recall',y='Precision',color = 'algorithm',shape='group',label='group',palette = dittoColors(),size=4,legend="right",ellipse=TRUE,ellipse.type = "convex")+ xlim(0.2,1)+ylim(0.2,1)
+ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0.2,1)+ylim(0.2,1)
+
+````
+
+````{r fig.height=6,fig.width=4}
+dmm<-c()
+knn<-c()
+for (i in 1:7) {
+  h<-levels(sce$truth)[i]
+  dmm[i]<-sum((sce$dmm[sce$truth==h]==sce$truth[sce$truth==h])/length(sce$truth[sce$truth==h]))
+  knn[i]<-sum((sce$knn[sce$truth==h]==sce$truth[sce$truth==h])/length(sce$truth[sce$truth==h]))
+}
+
+df<-data.frame(demuxmix=dmm,demuxSNP=knn)
+rownames(df)<-levels(sce$truth)[1:7]
+df$label<-levels(sce$truth)[1:7]
 
 
+ggpaired(df, cond1 = "demuxmix", cond2 = "demuxSNP",
+    color="label", palette = "jco",ylab="per-label accuracy")
 ````
 
 
@@ -183,9 +263,30 @@ counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_
 
 ## Combined hashing and SNPs approachs performs better than standalone hashing algorithms.
 
-
 ````{r}
 
 
+
+````
+
+````{r eval=FALSE}
+
+#demuxmix
+
+broad.sce.sim$dmm<-as.factor(gsub("Hashtag","K",dmmlabels$HTO))
+cf<-confusionMatrix(data=broad.sce.sim$dmm,reference=broad.sce.sim$truth)
+cf$byClass[,5:6]
+cf_demuxmix<-as.data.frame(cf$byClass[,5:6])
+cf_demuxmix$algorithm<-"demuxmix"
+cf_demuxmix$group<-gsub("Class: ","",rownames(cf_demuxmix))
+
+````
+
+````{r eval=FALSE}
+
+compar<-rbind(cf_demuxSNP,cf_demuxmix)
+compar<-compar[c(grep("K",compar$group), grep("Doublet",compar$group)),]
+compar$group<-factor(compar$group,levels=c("K1","K2","K3","K4","K5","K6","Doublet"))
+ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0.2,1)+ylim(0.2,1)
 
 ````
