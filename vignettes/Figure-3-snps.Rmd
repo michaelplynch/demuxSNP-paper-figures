@@ -237,7 +237,8 @@ ggboxplot(compar,x='algorithm',y='Precision', add = c("mean_se", "jitter"),color
 
 ggboxplot(compar,x='algorithm',y='Recall', add = c("mean_se", "jitter"),color="algorithm", label='group',repel=TRUE)
 
-
+sum(as.character(soup_factor)==as.character(labels2))/length(soup_factor)
+sum(as.character(ds_factor)==as.character(labels2))/length(soup_factor)
 ````
 
 
@@ -270,4 +271,35 @@ ggplot(data = df,
   scale_x_discrete(limits = c("Souporcell assignment", "Ground truth"),
                    expand = c(0.15, 0.05)) +
    coord_flip()
+````
+
+
+
+
+````{r eval=TRUE, fig.width=3,fig.height=5}
+
+list_of_files <- list.files(path = "/data/scratch/nextflow/ccrcc_out", recursive = TRUE,
+                            pattern = "runtime.txt", 
+                            full.names = TRUE)
+#1) Use fread() w/ rbindlist() from the data.table package
+
+#install.packages("data.table", repos = "https://cran.rstudio.com")
+library(data.table)
+
+# Read all the files and create a FileName column to store filenames
+DT <- rbindlist(sapply(list_of_files, fread, simplify = FALSE),
+                use.names = TRUE, idcol = "FileName")
+
+DT$method<-"souporcell"
+DT$method[grep("demuxSNP",DT$FileName)]<-"demuxSNP"
+DT$time<-DT$V1/60/60
+ggpar(ggbarplot(DT,x="method",y="time", add = c("mean_se", "jitter"),color="method",position=position_dodge()),ylim=c(0,max(DT$time)),ylab=c("time (h)"))
+````
+
+
+
+````{r}
+
+
+
 ````

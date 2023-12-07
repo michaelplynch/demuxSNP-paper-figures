@@ -1,0 +1,251 @@
+---
+title: "hashtag_sim_test"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{hashtag_sim_test}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(demuxSNPpaperfigures)
+library(dittoSeq)
+library(ggpubr)
+library(gridExtra)
+library(tictoc)
+library(SingleCellExperiment)
+library(Matrix)
+library(tidyverse)
+library(demuxSNP)
+```
+
+````{r}
+
+source("../R/hto_sim.R")
+source("../R/plot_hashtag.R")
+
+````
+
+
+````{r}
+
+#args <- commandArgs(trailingOnly = TRUE)
+tenx_path<-c('/data/yufei/210827_10X_KW9275_bcl/cellranger-6.1.1/GRCh38/BRI-1348/outs/filtered_feature_bc_matrix')
+#args[1]#c("/data/demuxSNP/data/processed/pbmc_data_4x_out/outs/filtered_feature_bc_matrix")
+barcodes_path<-c("/data/scratch/nextflow/ccrcc_out/barcodes_merged_e.tsv")
+lookup_path<-c("/data/scratch/nextflow/ccrcc_out/lookup_table_doublets_pbmc_e_25pc.tsv")
+key<-c("e")
+
+matrix<-readMM(paste(tenx_path,"/matrix.mtx.gz",sep=""))
+barcodes<-read.table(paste(tenx_path,"/barcodes.tsv.gz",sep=""))
+features<-read.table(paste(tenx_path, "/features.tsv.gz",sep=""))
+
+rownames(matrix)<-features$V2
+colnames(matrix)<-barcodes$V1
+
+rna<-matrix[features$V3=="Gene",]
+hto<-matrix[grep("Hashtag",features$V1),]
+
+sub_barcodes<-read.table(barcodes_path)
+lookup<-read_tsv(lookup_path)
+
+rna<-rna[,substr(colnames(rna),start=1,stop = 16) %in% substr(sub_barcodes$V1, start=1,stop=16)]
+hto<-hto[,substr(colnames(hto),start=1,stop = 16) %in% substr(sub_barcodes$V1, start=1,stop=16)]
+
+
+````
+
+
+
+
+````{r}
+
+new_bc<-sub_barcodes$V1[match(substr(colnames(rna),1,16),substr(sub_barcodes$V1,1,16))]
+rna1<-rna[,new_bc %in% lookup$original]
+rna2<-rna[,new_bc %in% lookup$replacement]
+print(dim(rna1));print(dim(rna2))
+rna_doub<-rna2+rna1
+rna_sing<-rna[,!c(new_bc %in% union(lookup$original,lookup$replacement))]
+rna_full<-cbind(rna_sing,rna_doub)
+
+hto1<-hto[,new_bc %in% lookup$original]
+hto2<-hto[,new_bc %in% lookup$replacement]
+print(dim(hto1));print(dim(hto2))
+hto_doub<-hto2+hto1
+hto_sing<-hto[,!c(new_bc %in% union(lookup$original,lookup$replacement))]
+hto_full<-cbind(hto_sing,hto_doub)
+
+sce<-SingleCellExperiment(list(counts=rna_full))
+hto_sce<-SingleCellExperiment(list(counts=hto_full))
+altExp(sce,"HTO")<-hto_sce
+mainExpName(sce)<-"RNA"
+head(colnames(sce))
+
+sce$new_bc<-sub_barcodes$V1[match(substr(colnames(sce),1,16),substr(sub_barcodes$V1,1,16))]
+
+sce$truth<-substr(sce$new_bc,start=18,stop=19)
+sce$truth[sce$new_bc %in% lookup$replacement]<-"Doublet"
+table(sce$truth)
+
+
+
+
+````
+
+````{r}
+
+rownames(hto)
+sig<-matrix(0,dim(hto)[1],dim(hto)[2])
+t<-substr(new_bc,18,19)
+truth<-gsub("K","Hashtag",t)
+for (i in seq_along(rownames(hto))) {
+  hashtag<-rownames(hto)[i]
+  sig[i,truth==hashtag]<-1
+}
+
+sig1<-sig[,new_bc %in% lookup$original]
+sig2<-sig[,new_bc %in% lookup$replacement]
+print(dim(sig1));print(dim(sig2))
+sig_doub<-sig2+sig1
+sig_sing<-sig[,!c(new_bc %in% union(lookup$original,lookup$replacement))]
+sig_full<-cbind(sig_sing,sig_doub)
+
+
+````
+
+````{r fig.height=2,fig.width=12}
+sig_full<-sig_full>0
+hto2<-hto_full
+shift<-c(0.2,0.15,0.25,0.15,0.3,0.05)
+hto_shift<-shift*hto_full
+hto2[sig_full]<-round(hto_shift[sig_full])
+
+class(hto2)
+hto2<-as.matrix(hto2)
+plot<-plot_hashtag(data.frame(t(log(hto2+1))),xlim=c(0,8),ylim=c(0,2000))
+do.call(grid.arrange,c(plot,nrow=1))
+
+hto_full<-as.matrix(hto_full)
+plot<-plot_hashtag(data.frame(t(log(hto_full+1))),xlim=c(0,10),ylim=c(0,2000))
+do.call(grid.arrange,c(plot,nrow=1))
+
+hto_low<-SingleCellExperiment(list(counts=hto2))
+altExp(sce,"HTO_old")<-altExp(sce,"HTO")
+altExp(sce,"HTO")<-hto_low
+
+````
+
+
+````{r}
+library(zellkonverter)
+sce$truth<-gsub("K","Hashtag",sce$truth)
+counts<-as.matrix(hto_full)
+rna=counts(sce)[unique(rownames(sce)),]
+colnames(rna)<-seq_len(dim(rna)[2])
+write10xCounts("rna.h5",x=rna,type="HDF5",overwrite=TRUE)
+h5File <- 'rna.h5'
+DropletUtils::read10xCounts(h5File)
+methods<-c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq","gmm_demux","demuxmix")
+library(cellhashR)
+colnames(counts)<-seq_len(dim(counts)[2])
+chr<-GenerateCellHashingCalls(counts,
+                              methods=methods,
+                              doTSNE = FALSE,
+                              rawFeatureMatrixH5 = h5File)
+
+chr<-chr[order(as.numeric(chr$cellbarcode)),]
+chr$gt<-sce$truth
+
+counts_low<-hto2
+colnames(counts_low)<-seq_len(dim(counts_low)[2])
+chr_low<-GenerateCellHashingCalls(counts_low,
+                              methods=methods,
+                              doTSNE = FALSE,
+                              rawFeatureMatrixH5 = h5File)
+
+chr_low<-chr_low[order(as.numeric(chr_low$cellbarcode)),]
+chr_low$gt<-sce$truth
+
+library(caret)
+methods=c("htodemux","bff_cluster","bff_raw","gmm_demux","demuxmix")
+df_full<-data.frame()
+for (i in seq_along(methods)) {
+  m<-methods[i]
+  data_ch=chr[[m]]
+  ref_ch=chr[['gt']]
+  data_fac<-factor(data_ch,union(data_ch,ref_ch))
+  ref_fac<-factor(ref_ch,union(data_ch,ref_ch))
+  cf<-confusionMatrix(data=data_fac,reference=ref_fac)
+  recall<-cf$byClass[,6]
+  precision<-cf$byClass[,5]
+  df<-data.frame(class=rownames(cf$byClass),data='high',method=m,precision=precision,recall=recall)
+  df_full<-rbind(df_full,df)
+}
+
+
+for (i in seq_along(methods2)) {
+  m<-methods2[i]
+  data_ch=chr_low[[m]]
+  ref_ch=chr_low[['gt']]
+  data_fac<-factor(data_ch,union(data_ch,ref_ch))
+  ref_fac<-factor(ref_ch,union(data_ch,ref_ch))
+  cf<-confusionMatrix(data=data_fac,reference=ref_fac)
+  recall<-cf$byClass[,6]
+  precision<-cf$byClass[,5]
+  df<-data.frame(class=rownames(cf$byClass),data='low',method=m,precision=precision,recall=recall)
+  df_full<-rbind(df_full,df)
+}
+
+df_full<-df_full[!is.na(df_full$recall),]
+df_full$class<-gsub("Class: ","",df_full$class)
+## barplot
+ggbarplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data",position=position_dodge())
+ggbarplot(df_full,x='method',y='precision', add = c("mean_se", "jitter"),color="data",position=position_dodge())
+
+````
+
+
+````{r fig.height=5,fig.width=12}
+rec<-ggboxplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data", label='class',label.select = list(top.down = 1),repel=TRUE)
+prec<-ggboxplot(df_full,x='method',y='precision', add = c("mean_se", "jitter"),color="data", label='class',label.select = list(top.down = 1),repel=TRUE)
+
+ggpar(prec,legend.title = "data quality",ylim = c(0.2,1)) + ggpar(rec,legend.title="data quality",ylim = c(0.2,1))
+
+````
+````{r}
+load("/data/scratch/nextflow/ccrcc_out/demuxSNP_e/e_final_sce.rdata")
+chr_low$dmeuxsnp<-sce$knn
+methods2<-c(methods,"demuxsnp")
+for (i in seq_along(c(methods2))) {
+  method<-methods2[i]
+  acc<-sum(chr_low[[method]]==chr_low$gt)/length(chr_low$gt)
+  print(paste(method, ' accuracy=',round(acc,3)))
+}
+
+````
+
+````{r fig.height=3.5,fig.width=3.5}
+dfa<-data.frame(x=rnorm(4,mean=0.95,sd=0.05),y=rnorm(4,mean=0.05,sd=0.05),sample="a")
+dfb<-data.frame(x=rnorm(3,mean=0.05,sd=0.05),y=rnorm(3,mean=0.05,sd=0.05),sample="b")
+dfc<-data.frame(x=rnorm(5,mean=0.95,sd=0.05),y=rnorm(5,mean=0.95,sd=0.05),sample="c")
+df_tot<-rbind(dfa,dfb,dfc)
+df_tot$sample[9]<-"unknown"
+ggpar(ggscatter(df_tot,x="x",y="y",color = "sample",palette=c("blue","red","black","yellow")),xlab="SNP1",ylab="SNP2")
+````
+
+
+````{r}
+
+bg<-rpois(1000,2)
+sig<-rpois(1000,100)
+tot<-c(sig,bg)
+hist(tot,breaks=15)
+
+````

@@ -30,6 +30,25 @@ load("../data/sce_app.rda")
 
 ````{r}
 
+library(SIBERG)
+altExp(sce_app,"HTO")<-as(altExp(sce_app,"HTO"), "SingleCellExperiment")
+c<-counts(altExp(sce_app,"HTO"))[2,]
+sb<-fitNB(c)
+
+sb
+hist(c)
+hist(log(c+1))
+sig1<-rnbinom(10000,mu=sb[1],size=1/sb[3])
+sig2<-rnbinom(3000,mu=sb[2],size=1/sb[4])
+hist(log(c(sig1,sig2)+1))
+hist(c(sig1,sig2))
+# dat <- rnbinom(100, mu=1000, size=1/0.2)
+# fitNB(y=dat)
+
+````
+
+````{r}
+
 library(scuttle)
 df <- perCellQCMetrics(sce_app,
                        subsets=list(Mito=grep("^MT",rownames(sce_app))),
@@ -62,17 +81,27 @@ table(sce_app$doubletClassify_between_label,seurat_app$hash.ID)
 ````{r}
 df2<-as.data.frame(df[seurat_app$hash.ID=="Negative",])
 library(ggpubr)
-plots<-ggscatterhist(df2,x="sum",y="detected", title = "Quality metrics distributions for 'Negative' group") 
+
+plots<-ggscatterhist(df2,x="sum",y="detected", title = "Quality metrics distributions for 'Negative' group")
 plots$sp <- plots$sp +
     geom_hline(yintercept = 1000, linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = 1500, linetype = "dashed", color = "red")
+  geom_vline(xintercept = 1500, linetype = "dashed", color = "red") 
 plots
-
-high_qual<-df2$sum>1500 & df2$detected>750
+ggpar(plots,xscale="log10",yscale="log10",xlab=("library size"),ylab=c("detected genes"))
+high_qual<-df2$sum>1500 & df2$detected>1000
 
 table(high_qual)
 
+
+````
+
+
+
+````{r fig.height=2,fig.width=6}
 barplot(table(high_qual))
+df_qual<-data.frame(table(high_qual))
+df_qual$high_quality<-"high_quality"
+ggbarplot(df_qual,x="high_quality",y="Freq", fill="high_qual" ) + rotate()
 ````
 
  alluvial plots https://enblacar.github.io/SCpubr-book-v1/13-AlluvialPlot.html
@@ -132,8 +161,114 @@ sce$soup_rc<-recode(sce$soup,
                     "5"="Hashtag2")
 
 table(sce$soup_rc,sce$knn)
+
+
+````
+
+
+
+````{r fig.width=12,fig.height=4}
+
+
+library(ggalluvial)
+df<-data.frame(soup=sce$soup_rc,demuxSNP=sce$knn,htodemux=sce$hash.ID)
+df<-reshape2::melt(table(sce$soup_rc,sce$knn,sce$hash.ID))
+ggplot(data = df,
+       aes(axis1 = Var1, axis2 = Var2, axis3 = Var3, y = value)) +
+  geom_alluvium(aes(fill = Var2)) +
+  geom_stratum() +
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Souporcell", "demuxSNP","HTODemux"),
+                   expand = c(0.15, 0.05)) +
+   coord_flip()
+
+````
+
+
+````{r}
+
+table(sce$hash.ID)
+table(sce$soup)
+````
+
+
+````{r}
+library(demuxmix)
+counts_low=as.matrix(counts(altExp(sce,"HTO")))
+dmm<-demuxmix(hto=counts_low,model="naive")
+pAcpt(dmm) <- 0
+dmmlabels<-dmmClassify(dmm)
+dmmlabels$HTO[dmmlabels$Type=="negative"]<-"Negative"
+dmmlabels$HTO[dmmlabels$Type=="multiplet"]<-"Doublet"
+split<-c(dmmlabels$Prob<0.9)
+
+hto_jnorm<-NormalizeData(counts_low,normalization.method = "CLR")
+df_j<-data.frame(t(hto_jnorm))
+plot_hashtag(df_j,split=split)
+
 ````
 
 
 
 
+````{r}
+
+sce_negative<-sce[,sce$hash.ID=="Negative"]
+
+sce_negative$knn
+
+snps_neg<-counts(altExp(sce,"SNP"))
+
+d<-dist(t(snps_neg))
+dd<-as.matrix(d)
+dim(d)
+hashtags<-rownames(altExp(sce,"HTO"))
+ddd<-matrix(0,6,6)
+for (i in 1:6) {
+  hashtag_neg<-hashtags[i]
+  for (j in 1:6) {
+    hashtag_knn<-hashtags[j]
+    c1<-c(sce$hash.ID=="Negative" & sce$knn==hashtag_neg)
+    c2<-c(sce$train==TRUE & sce$knn==hashtag_knn)
+    ddd[i,j]<-mean(dd[c1,c2])
+  }
+}
+ddd
+library(ComplexHeatmap)
+library(circlize)
+col_fun<-colorRamp2(c(0,3),c("white","brown"))
+colnames(ddd)<-hashtags
+rownames(ddd)<-hashtags
+Heatmap(log(ddd),cluster_rows=FALSE,cluster_columns=FALSE,col=col_fun)
+
+snps<-counts(altExp(sce,"SNP"))
+library(geosphere)
+centroid<-c()
+combs1<-paste(sce$hash.ID, sce$knn[])
+levels1<-grep("^Negative",unique(combs1),value=TRUE)
+combs2<-paste(sce$train,sce$knn)
+levels2<-grep("^TRUE",unique(combs2))
+centroid1<-matrix(0,92,6)
+for (i in c(1,3,4,5,6)) {
+  hashtag<-hashtags[i]
+  centroid1[,i]<-rowMeans(snps[,sce$hash.ID=="Negative" & sce$knn==hashtag])
+}
+colnames(centroid1)<-paste("Hashtag",c(1,2,3,4,5,6))
+centroid1
+centroid2<-matrix(0,92,6)
+for (i in c(1,3,4,5,6)) {
+  hashtag<-hashtags[i]
+  centroid2[,i]<-rowMeans(snps[,sce$train==TRUE & sce$knn==hashtag])
+}
+colnames(centroid2)<-paste("Hashtag", c(1:6))
+centroid2
+
+c_full<-cbind(centroid1,centroid2)
+
+
+mat<-as.matrix(dist(t(c_full)))
+mat<-mat[-c(2,8),-c(2,8)]
+col_fun<-colorRamp2(c(0,max(mat)),c("white","brown"))
+Heatmap(mat[1:5,6:10],cluster_rows = FALSE,cluster_columns = FALSE,col=col_fun,column_title = "High confidence cells",row_title = "Negative reassigned cells",heatmap_legend_param = list(title = "Euclidean \n distance"),)
+````

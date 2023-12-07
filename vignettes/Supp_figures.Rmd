@@ -1,0 +1,59 @@
+---
+title: "Supp_figures"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Supp_figures}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(demuxSNPpaperfigures)
+library(demuxSNP)
+```
+
+
+
+````{r}
+
+load("/data/scratch/nextflow/ccrcc_out/demuxSNP_e/e_final_sce.rdata")
+
+sce$truth<-gsub("K","Hashtag", sce$truth)
+````
+
+
+````{r}
+kvec<-seq(5,100,5)
+acc<-c()
+for (i in seq_along(kvec)) {
+  k<-kvec[i]
+  print(k)
+  sce$knn<-NULL
+  sce<-reassign(sce,k=k,d=400,train_cells = sce$train,predict_cells = sce$predict)
+  acc[i]<-sum((sce$truth==sce$knn)/length(sce$truth))
+}
+plot(kvec,acc)
+````
+
+````{r}
+dvec<-seq(25,750,25)
+for (i in seq_along(dvec)) {
+  d<-dvec[i]
+  print(d)
+  sce$knn<-NULL
+  sce<-reassign(sce,k=30,d=d,train_cells = sce$train,predict_cells = sce$predict)
+  acc[i]<-sum((sce$truth==sce$knn)/length(sce$truth))
+}
+
+
+plot(dvec,acc)
+````
+
+

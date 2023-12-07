@@ -88,7 +88,7 @@ truth_low<-sce$truth
 table(sce$truth)
 ````
 
-````{r}
+````{r eval=FALSE}
 
 split<-c(chr_low$gt=="Hashtag5" & chr_low$htodemux!="Hashtag5")
 hto_jnorm<-NormalizeData(counts_low)
@@ -102,11 +102,11 @@ plot_hashtag(df_j,split=split)
 
 
 ````{r}
-
+methods<-c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq","gmm_demux")
 library(cellhashR)
 colnames(counts)<-seq_len(dim(counts)[2])
 chr<-GenerateCellHashingCalls(counts,
-                              methods=c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq"),
+                              methods=methods,
                               doTSNE = FALSE)
 
 chr<-chr[order(as.numeric(chr$cellbarcode)),]
@@ -114,7 +114,7 @@ chr$gt<-truth
 
 colnames(counts_low)<-seq_len(dim(counts_low)[2])
 chr_low<-GenerateCellHashingCalls(counts_low,
-                              methods=c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq"),
+                              methods=methods,
                               doTSNE = FALSE)
 
 chr_low<-chr_low[order(as.numeric(chr_low$cellbarcode)),]
@@ -196,9 +196,9 @@ counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_
 
 
 ````{r}
-
-dmm<-demuxmix(hto=counts_low,model="naive")
-pAcpt(dmm) <- 0
+rna<-colSums(counts(sce))
+dmm<-demuxmix(hto=counts_low,rna=rna)
+#pAcpt(dmm) <- 0
 dmmlabels<-dmmClassify(dmm)
 dmmlabels$HTO[dmmlabels$Type=="negative"]<-"Negative"
 dmmlabels$HTO[dmmlabels$Type=="multiplet"]<-"Doublet"
@@ -208,9 +208,9 @@ sum(dmmlabels$HTO==sce$truth)/length(dmmlabels$HTO)
 sce$dmm<-dmmlabels$HTO
 
 #demuxSNP
-
-sce$knn<-factor(sce$knn,levels=c(levels(sce$knn),"Negative"))
-sce$truth<-factor(sce$truth,levels=levels(sce$knn))
+sce$knn<-as.character(sce$knn)
+sce$knn<-factor(sce$knn,levels=c(unique(sce$knn),"Negative"))
+sce$truth<-factor(sce$truth,levels=c(levels(sce$knn),"uncertain"))
 cf<-confusionMatrix(data=sce$knn,reference=sce$truth)
 cf$byClass[,5:6]
 cf_demuxSNP<-as.data.frame(cf$byClass[,5:6])
@@ -218,7 +218,7 @@ cf_demuxSNP$algorithm<-"demuxSNP"
 cf_demuxSNP$group<-gsub("Class: ","",rownames(cf_demuxSNP))
 
 #demuxmix
-sce$dmm<-as.factor(sce$dmm)
+sce$dmm<-factor(sce$dmm,levels=c(unique(sce$dmm)))
 cf<-confusionMatrix(data=sce$dmm,reference=sce$truth)
 cf$byClass[,5:6]
 cf_demuxmix<-as.data.frame(cf$byClass[,5:6])
@@ -232,6 +232,13 @@ ggscatter(compar,x='Recall',y='Precision',color = 'algorithm',shape='group',labe
 ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0.2,1)+ylim(0.2,1)
 
 ````
+
+````{r}
+
+sum(sce$knn==sce$truth)/length(sce$truth)
+sum(sce$dmm==sce$truth)/length(sce$truth)
+````
+
 
 ````{r fig.height=6,fig.width=4}
 dmm<-c()
@@ -290,3 +297,6 @@ compar$group<-factor(compar$group,levels=c("K1","K2","K3","K4","K5","K6","Double
 ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0.2,1)+ylim(0.2,1)
 
 ````
+
+
+
