@@ -231,15 +231,20 @@ for (i in seq_along(c(methods2))) {
 
 ````
 
-````{r fig.height=3.5,fig.width=3.5}
+````{r fig.height=2.5,fig.width=3.5}
 dfa<-data.frame(x=rnorm(4,mean=0.95,sd=0.05),y=rnorm(4,mean=0.05,sd=0.05),sample="a")
 dfb<-data.frame(x=rnorm(3,mean=0.05,sd=0.05),y=rnorm(3,mean=0.05,sd=0.05),sample="b")
 dfc<-data.frame(x=rnorm(5,mean=0.95,sd=0.05),y=rnorm(5,mean=0.95,sd=0.05),sample="c")
 df_tot<-rbind(dfa,dfb,dfc)
-df_tot$sample[9]<-"unknown"
+df_tot$sample[9]<-"uncertain"
 ggpar(ggscatter(df_tot,x="x",y="y",color = "sample",palette=c("blue","red","black","yellow")),xlab="SNP1",ylab="SNP2")
 ````
 
+````{r}
+
+
+
+````
 
 ````{r}
 
@@ -247,5 +252,29 @@ bg<-rpois(1000,2)
 sig<-rpois(1000,100)
 tot<-c(sig,bg)
 hist(tot,breaks=15)
+
+````
+
+````{r fig.width=12,fig.height=3}
+source("../R/hto_sim.R")
+source("../R/plot_hashtag.R")
+mat<-logimat(6,nsinglet=rep(1000,6), ndoub = 1500, nneg=500)
+size_sig=rep(1,6)
+size_bg=rep(1,6)
+mu_sig=rep(1500,6)
+mu_bg=rep(10,6)
+counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_bg = mu_bg, mat = mat, seed = 1)
+
+dim(counts)
+truth<-colnames(counts)
+df<-data.frame(t(log(counts+1)))
+plot<-plot_hashtag(df)
+do.call(grid.arrange,c(plot,nrow=1))
+````
+
+````{r}
+
+
+
 
 ````

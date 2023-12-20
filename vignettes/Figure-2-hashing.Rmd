@@ -23,6 +23,7 @@ library(demuxmix)
 library(dittoSeq)
 library(ggpubr)
 library(gridExtra)
+library(scater)
 
 ```
 
@@ -74,11 +75,13 @@ do.call(grid.arrange,c(plot,nrow=1))
 # do.call(grid.arrange,c(plot,nrow=1))
 
 load("/data/scratch/nextflow/ccrcc_out/demuxSNP_e/e_final_sce.rdata")
+df_qual<-perCellQCMetrics(sce)
+sce$qual<-df_qual$sum>1000 | df_qual$detected>750
+table(sce$qual)
+sce<-sce[,sce$qual==TRUE]
 hto_j<-counts(altExp(sce,"HTO"))
 dim(hto_j)
 df_j<-data.frame(t(hto_j))
-plot_j<-plot_hashtag(df_j,ylim=c(0,2500))
-do.call(grid.arrange,c(plot_j,nrow=1))
 
 counts_low<-hto_j
 library(stringr)
@@ -88,20 +91,9 @@ truth_low<-sce$truth
 table(sce$truth)
 ````
 
+
+
 ````{r eval=FALSE}
-
-split<-c(chr_low$gt=="Hashtag5" & chr_low$htodemux!="Hashtag5")
-hto_jnorm<-NormalizeData(counts_low)
-df_j<-data.frame(t(hto_jnorm))
-plot_hashtag(df_j,split=split)
-
-
-````
-
-
-
-
-````{r}
 methods<-c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq","gmm_demux")
 library(cellhashR)
 colnames(counts)<-seq_len(dim(counts)[2])
@@ -160,7 +152,96 @@ ggboxplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="dat
 ggboxplot(df_full,x='method',y='precision', add = c("mean_se", "jitter"),color="data", label='class',label.select = list(top.down = 1))
 ````
 
+````{r fig.height=3 , fig.width=12}
 
+hto_low<-as.matrix(counts(altExp(sce,"HTO")))
+plot<-plot_hashtag(data.frame(t(log(hto_low+1))),xlim=c(0,10),ylim=c(0,2000),breaks=get_breaks(n=6,from=0,to=10))
+grid.arrange(grobs=plot,nrow=1,top=textGrob("Low quality hashing logcounts", gp=gpar(fontsize=20,font=8)))
+
+hto_high<-as.matrix(counts(altExp(sce,"HTO_old")))
+plot<-plot_hashtag(data.frame(t(log(hto_high+1))),xlim=c(0,10),ylim=c(0,2000),breaks=get_breaks(n=6,from=0,to=10))
+grid.arrange(grobs=plot,nrow=1,top=textGrob("High quality hashing logcounts", gp=gpar(fontsize=20,font=8)))
+
+````
+
+
+````{r}
+library(zellkonverter)
+library(DropletUtils)
+sce$truth<-gsub("K","Hashtag",sce$truth)
+counts<-as.matrix(hto_high)
+rna=counts(sce)[unique(rownames(sce)),]
+colnames(rna)<-seq_len(dim(rna)[2])
+write10xCounts("rna.h5",x=rna,type="HDF5",overwrite=TRUE)
+h5File <- 'rna.h5'
+DropletUtils::read10xCounts(h5File)
+methods<-c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq","gmm_demux","demuxmix")
+library(cellhashR)
+colnames(counts)<-seq_len(dim(counts)[2])
+chr<-GenerateCellHashingCalls(counts,
+                              methods=methods,
+                              doTSNE = FALSE,
+                              rawFeatureMatrixH5 = h5File)
+
+chr<-chr[order(as.numeric(chr$cellbarcode)),]
+chr$gt<-sce$truth
+
+counts_low<-hto_low
+colnames(counts_low)<-seq_len(dim(counts_low)[2])
+chr_low<-GenerateCellHashingCalls(counts_low,
+                              methods=methods,
+                              doTSNE = FALSE,
+                              rawFeatureMatrixH5 = h5File)
+
+chr_low<-chr_low[order(as.numeric(chr_low$cellbarcode)),]
+chr_low$gt<-sce$truth
+
+library(caret)
+methods=c("htodemux","bff_cluster","bff_raw","gmm_demux","demuxmix")
+df_full<-data.frame()
+for (i in seq_along(methods)) {
+  m<-methods[i]
+  data_ch=chr[[m]]
+  ref_ch=chr[['gt']]
+  data_fac<-factor(data_ch,union(data_ch,ref_ch))
+  ref_fac<-factor(ref_ch,union(data_ch,ref_ch))
+  cf<-confusionMatrix(data=data_fac,reference=ref_fac)
+  recall<-cf$byClass[,6]
+  precision<-cf$byClass[,5]
+  df<-data.frame(class=rownames(cf$byClass),data='high',method=m,precision=precision,recall=recall)
+  df_full<-rbind(df_full,df)
+}
+
+
+for (i in seq_along(methods)) {
+  m<-methods[i]
+  data_ch=chr_low[[m]]
+  ref_ch=chr_low[['gt']]
+  data_fac<-factor(data_ch,union(data_ch,ref_ch))
+  ref_fac<-factor(ref_ch,union(data_ch,ref_ch))
+  cf<-confusionMatrix(data=data_fac,reference=ref_fac)
+  recall<-cf$byClass[,6]
+  precision<-cf$byClass[,5]
+  df<-data.frame(class=rownames(cf$byClass),data='low',method=m,precision=precision,recall=recall)
+  df_full<-rbind(df_full,df)
+}
+
+df_full<-df_full[!is.na(df_full$recall),]
+df_full$class<-gsub("Class: ","",df_full$class)
+## barplot
+ggbarplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data",position=position_dodge())
+ggbarplot(df_full,x='method',y='precision', add = c("mean_se", "jitter"),color="data",position=position_dodge())
+
+````
+
+
+````{r fig.height=5,fig.width=12}
+rec<-ggboxplot(df_full,x='method',y='recall', add = c("mean_se", "jitter"),color="data",,repel=TRUE)
+prec<-ggboxplot(df_full,x='method',y='precision', add = c("mean_se", "jitter"),color="data",,repel=TRUE)
+
+ggpar(prec,legend.title = "data quality",ylim = c(0,1)) + ggpar(rec,legend.title="data quality",ylim = c(0,1))
+
+````
 
 ````{r eval=FALSE}
 set.seed(2)
@@ -193,6 +274,52 @@ counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_
 ````
 
 
+````{r}
+total_nneg<-c()
+total_acc<-c()
+total_nnegpc<-c()
+chr_low$demuxsnp<-sce$knn
+methods=c("htodemux","bff_cluster","bff_raw","gmm_demux","demuxmix","demuxsnp")
+for (i in seq_along(methods)) {
+  m<-methods[i]
+  data_ch=chr_low[[m]]
+  ref_ch=chr_low$gt
+  nneg<-sum(data_ch=="Negative")
+  acc<-sum(data_ch==ref_ch)/length(data_ch)
+  print(nneg)
+  print(acc)
+  total_nneg[i]<-nneg
+  total_nnegpc[i]<-nneg/length(ref_ch)
+  total_acc[i]<-acc
+}
+names(total_nneg)<-methods
+names(total_nnegpc)<-methods
+names(total_acc)<-methods
+df_methods_low<-data.frame(method=methods,pc_neg=total_nnegpc,accuracy=total_acc)
+df_methods_low$data<-"low"
+
+for (i in seq_along(methods)) {
+  m<-methods[i]
+  data_ch=chr[[m]]
+  ref_ch=chr$gt
+  nneg<-sum(data_ch=="Negative")
+  acc<-sum(data_ch==ref_ch)/length(data_ch)
+  print(nneg)
+  print(acc)
+  total_nneg[i]<-nneg
+  total_nnegpc[i]<-nneg/length(ref_ch)
+  total_acc[i]<-acc
+}
+names(total_nneg)<-methods
+names(total_nnegpc)<-methods
+names(total_acc)<-methods
+
+df_methods_high<-data.frame(method=methods,pc_neg=total_nnegpc,accuracy=total_acc)
+df_methods_high$data="high"
+df_methods<-rbind(df_methods_high,df_methods_low)
+ggbarplot(df_methods,x='method',y='accuracy',fill = 'data',position=position_dodge(),color = 'data',title='Overall Classificaton Accuracy between methods and high/low quality hashing',xlab='method',ylab='Overall CLassification Accuracy')
+ggbarplot(df_methods,x='method',y='pc_neg',fill = 'data',position=position_dodge(),color = 'data' ,title='% Negatives assigned between methods and high/low quality hashing',xlab='method',ylab='% hashing negatives')
+````
 
 
 ````{r}
@@ -229,14 +356,17 @@ compar<-rbind(cf_demuxSNP,cf_demuxmix)
 compar<-compar[c(grep("Hashtag",compar$group), grep("Doublet",compar$group)),]
 compar$group<-factor(compar$group,levels=c("Hashtag1","Hashtag2","Hashtag3","Hashtag4","Hashtag5","Hashtag6","Doublet"))
 ggscatter(compar,x='Recall',y='Precision',color = 'algorithm',shape='group',label='group',palette = dittoColors(),size=4,legend="right",ellipse=TRUE,ellipse.type = "convex")+ xlim(0.2,1)+ylim(0.2,1)
-ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0.2,1)+ylim(0.2,1)
+ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0,1)+ylim(0,1)
 
 ````
 
 ````{r}
 
-sum(sce$knn==sce$truth)/length(sce$truth)
-sum(sce$dmm==sce$truth)/length(sce$truth)
+sum(as.character(sce$knn)==as.character(sce$truth))/length(sce$truth)
+sum(as.character(sce$dmm)==as.character(sce$truth))/length(sce$truth)
+
+sce$knn<-as.character(sce$knn)
+sce$dmm<-as.character(sce$dmm)
 ````
 
 
@@ -258,6 +388,11 @@ ggpaired(df, cond1 = "demuxmix", cond2 = "demuxSNP",
     color="label", palette = "jco",ylab="per-label accuracy")
 ````
 
+````{r}
+
+
+
+````
 
 ## Misassigned cells generally fall between signal and background peak:
 

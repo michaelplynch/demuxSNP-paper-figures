@@ -17,7 +17,10 @@ knitr::opts_chunk$set(
 ```{r setup}
 
 library(demuxSNPpaperfigures)
-
+library(dittoSeq)
+library(ggpubr)
+library(ggalluvial)
+library(data.table)
 ```
 
 
@@ -138,7 +141,7 @@ key=c("a","b","c","d","e","f","g","h","i","j")
 ccrcc_ari<-collect_soup(ndoub=n,ds=ds,key=key)
 
 plot(n,ccrcc_ari$precision,xlab="doublet rate")
-library(ggpubr)
+
 df_p=data.frame(key=key,doublets=n,metric=ccrcc_ari$precision,type="precision",algorithm="souporcell")
 df_r=data.frame(key=key,doublets=n,metric=ccrcc_ari$recall,type="recall",algorithm="souporcell")
 df<-rbind(df_p,df_r)
@@ -155,7 +158,7 @@ key=c("a","b","c","d","e","f","g","h","i","j")
 ccrcc_demuxsnp<-collect_demuxsnp(ndoub=n,ds=ds,key=key)
 
 plot(n,ccrcc_demuxsnp$precision,xlab="doublet rate")
-library(ggpubr)
+
 df_p=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$precision,type="precision",algorithm="demuxSNP")
 df_r=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$recall,type="recall",algorithm="demuxSNP")
 df_demuxsnp<-rbind(df_p,df_r)
@@ -172,8 +175,8 @@ ggline(data=df_all, x="doublets", y="metric", linetype="algorithm", xlab = "% do
 ````
 
 ````{r}
-key="h"
-n=40
+key="f"
+n=30
 
 #load ground truth
   lookup<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
@@ -243,7 +246,7 @@ sum(as.character(ds_factor)==as.character(labels2))/length(soup_factor)
 
 
 
-````{r}
+````{r fig.height=5,fig.width=3}
 s1<-soup_factor
 s2<-soup_factor==labels2
 t<-reshape2::melt(table(s1,s2))
@@ -258,7 +261,7 @@ ggbarplot(df,x='group',y='count',fill = "correct" ,legend="right",orientation = 
 
 ````{r fig.height=3,fig.width=10}
 
-library(ggalluvial)
+
 df<-data.frame(soup=soup_factor,truth=labels2)
 df<-as.data.frame(table(soup_factor,labels2))
 df$result<-c(df$soup_factor==df$labels2)
@@ -284,7 +287,7 @@ list_of_files <- list.files(path = "/data/scratch/nextflow/ccrcc_out", recursive
 #1) Use fread() w/ rbindlist() from the data.table package
 
 #install.packages("data.table", repos = "https://cran.rstudio.com")
-library(data.table)
+
 
 # Read all the files and create a FileName column to store filenames
 DT <- rbindlist(sapply(list_of_files, fread, simplify = FALSE),

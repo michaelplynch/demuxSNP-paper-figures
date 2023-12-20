@@ -10,7 +10,7 @@
 #' @importFrom ggpubr gghistogram
 #' @importFrom dittoSeq dittoColors
 #'
-plot_hashtag<-function(df, split=NULL,xlim=c(0,NA),ylim=c(0,NA)) {
+plot_hashtag<-function(df, split=NULL,xlim=c(0,NA),ylim=c(0,NA),breaks=waiver()) {
   plots <- list()
   for (i in seq_along(colnames(df))) {
     tag<-colnames(df)[i]
@@ -24,7 +24,10 @@ plot_hashtag<-function(df, split=NULL,xlim=c(0,NA),ylim=c(0,NA)) {
     }
 
 
-    plotx<-gghistogram(df, x=tag, fill = fill, palette = "lancet", alpha=0.7) + xlim(xlim) + ylim(ylim)
+    plotx<-gghistogram(df, x=tag, fill = fill, palette = "lancet", alpha=0.7) +
+      ylim(ylim) +
+      scale_x_continuous(breaks=breaks,limits=xlim)
+
     plots[[i]]<-plotx
   }
   return(plots)
