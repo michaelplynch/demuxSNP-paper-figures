@@ -41,13 +41,14 @@ collect_soup<-function(ndoub,ds,key) {
   
   for (i in seq_along(key)) {
   ## ground truth
-  lookup<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
-  doublet_barcodes<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
+  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
+  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
   label<-substr(doublet_barcodes$barcode,start=18,stop=19)
-  label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+  #label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+  label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
   
   ## souporcell results
-  souporcell<-read.table(file=paste("/data/scratch/nextflow/ccrcc_out/pbmc_",key[i],"_",n[i],"/clusters.tsv",sep=""), sep='\t',header=TRUE)
+  souporcell<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/soup_",key[i],"_",n[i],"/clusters.tsv",sep=""), sep='\t',header=TRUE)
   souporcell$assignment[souporcell$status=="doublet"]<-"Doublet"
   souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
 
@@ -87,6 +88,64 @@ collect_soup<-function(ndoub,ds,key) {
 return(res)
 }
 
+collect_vireo<-function(ndoub,ds,key) {
+  library(readr)
+  library(dplyr)
+  library(caret)
+  library(mclust)
+  n<-ndoub
+  ari_n<-c(); recall_n<-c();precision_n<-c()
+  
+  for (i in seq_along(key)) {
+  ## ground truth
+  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
+  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
+  label<-substr(doublet_barcodes$barcode,start=18,stop=19)
+  #label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+  label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
+  
+  ## souporcell results
+  vireo<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/vireo_",key[i],"_",n[i],"/donor_ids.tsv",sep=""), sep='\t',header=TRUE)
+  vireo<-vireo[match(doublet_barcodes$barcode,vireo$cell),]
+  vireo$donor_id[vireo$donor_id=="doublet"]<-"Doublet"
+  #souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
+
+  ## recode souporcell labels (need to add if else to handle souporcell missing a cluster)
+  t<-table(label,vireo$donor_id)
+  k<-t[grep("[0-9]",rownames(t)),grep("[0-9]",colnames(t))]
+  kp<-proportions(k+1,1)
+
+  m<-max.col(kp)
+  vals<-kp[cbind(seq_along(m),m)]
+  m[which.min(vals)]<-c(setdiff(seq_along(m),m[-c(which.min(vals))]))
+
+  y<-rownames(kp)
+  z<-colnames(kp)[m]
+  w<-as.character(z)
+  names(w)<-as.character(y)
+  vireo_new<-recode(vireo$donor_id,!!!setNames(y,z))
+
+  print(table(label))
+  print(table(vireo_new))
+  print(table(label,vireo_new))
+ 
+    ## evaluate performance
+  data=factor(vireo_new, levels=sort(union(vireo_new,label)))
+  ref=factor(label, levels=sort(union(vireo_new,label)))
+  ari<-adjustedRandIndex(data,ref)
+  cf<-confusionMatrix(data=data,reference=ref)
+  prec<-cf$byClass[3,5]
+  rec<-cf$byClass[3,6]
+  print(ari)
+  ari_n[i]<-ari
+  recall_n[i]<-rec
+  precision_n[i]<-prec
+  print(key[i])
+  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n)
+}
+return(res)
+}
+
 collect_demuxsnp<-function(ndoub,ds,key) {
   library(readr)
   library(dplyr)
@@ -97,13 +156,13 @@ collect_demuxsnp<-function(ndoub,ds,key) {
   
   for (i in seq_along(key)) {
   ## ground truth
-  lookup<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
-  doublet_barcodes<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
+  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
+  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
   label<-substr(doublet_barcodes$barcode,start=18,stop=19)
-  label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+  label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
   
   ## souporcell results
-  demuxsnp<-read.table(file=paste("/data/scratch/nextflow/ccrcc_out/demuxSNP_",key[i],"/",key[i],"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+  demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key[i],"/",key[i],"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
   
   t<-table(label,demuxsnp$demuxSNP)
 
@@ -148,6 +207,21 @@ df<-rbind(df_p,df_r)
 ggline(data=df, x="doublets", y="metric", linetype="type", xlab = "% doublets")
 ````
 
+````{r fig.width=4,fig.height=4}
+
+n=c(5,10,15,20,25,30,35,40,45,50)
+ds=c(2500,500,250,125)
+key=c("a","b","c","d","e","f","g","h","i","j")
+
+ccrcc_vireo<-collect_vireo(ndoub=n,ds=ds,key=key)
+
+plot(n,ccrcc_vireo$precision,xlab="doublet rate")
+
+df_p=data.frame(key=key,doublets=n,metric=ccrcc_vireo$precision,type="precision",algorithm="vireo")
+df_r=data.frame(key=key,doublets=n,metric=ccrcc_vireo$recall,type="recall",algorithm="vireo")
+df<-rbind(df_p,df_r)
+ggline(data=df, x="doublets", y="metric", linetype="type", xlab = "% doublets")
+````
 
 ````{r}
 
@@ -175,22 +249,22 @@ ggline(data=df_all, x="doublets", y="metric", linetype="algorithm", xlab = "% do
 ````
 
 ````{r}
-key="f"
-n=30
+key="h"
+n=40
 
 #load ground truth
-  lookup<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
-  doublet_barcodes<-read_tsv(paste("/data/scratch/nextflow/ccrcc_out/barcodes_merged_pbmc_",key,"_", n, "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
+  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
+  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key,"_", n, "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
   label<-substr(doublet_barcodes$barcode,start=18,stop=19)
   label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
 # load demuxsnp from key
-demuxsnp<-read.table(file=paste("/data/scratch/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
 ds_reorder<-demuxsnp$demuxSNP[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
 ds_recode<-gsub("Hashtag","K",ds_reorder)
 
 #load souporcell from key
 
-souporcell<-read.table(file=paste("/data/scratch/nextflow/ccrcc_out/pbmc_",key,"_",n,"/clusters.tsv",sep=""), sep='\t',header=TRUE)
+souporcell<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/soup_",key,"_",n,"/clusters.tsv",sep=""), sep='\t',header=TRUE)
 souporcell$assignment[souporcell$status=="doublet"]<-"Doublet"
 souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
 
@@ -246,7 +320,7 @@ sum(as.character(ds_factor)==as.character(labels2))/length(soup_factor)
 
 
 
-````{r fig.height=5,fig.width=3}
+````{r fig.height=5,fig.width=4}
 s1<-soup_factor
 s2<-soup_factor==labels2
 t<-reshape2::melt(table(s1,s2))
@@ -281,7 +355,7 @@ ggplot(data = df,
 
 ````{r eval=TRUE, fig.width=3,fig.height=5}
 
-list_of_files <- list.files(path = "/data/scratch/nextflow/ccrcc_out", recursive = TRUE,
+list_of_files <- list.files(path = "/data/projects/demuxSNP/nextflow/ccrcc_out", recursive = TRUE,
                             pattern = "runtime.txt", 
                             full.names = TRUE)
 #1) Use fread() w/ rbindlist() from the data.table package
@@ -294,7 +368,8 @@ DT <- rbindlist(sapply(list_of_files, fread, simplify = FALSE),
                 use.names = TRUE, idcol = "FileName")
 
 DT$method<-"souporcell"
-DT$method[grep("demuxSNP",DT$FileName)]<-"demuxSNP"
+DT$method[grep("demuxSNP_",DT$FileName)]<-"demuxSNP"
+DT$method[grep("vireo_",DT$FileName)]<-"vireo"
 DT$time<-DT$V1/60/60
 ggpar(ggbarplot(DT,x="method",y="time", add = c("mean_se", "jitter"),color="method",position=position_dodge()),ylim=c(0,max(DT$time)),ylab=c("time (h)"))
 ````

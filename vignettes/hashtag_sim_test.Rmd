@@ -232,12 +232,14 @@ for (i in seq_along(c(methods2))) {
 ````
 
 ````{r fig.height=2.5,fig.width=3.5}
+set.seed(3)
 dfa<-data.frame(x=rnorm(4,mean=0.95,sd=0.05),y=rnorm(4,mean=0.05,sd=0.05),sample="a")
 dfb<-data.frame(x=rnorm(3,mean=0.05,sd=0.05),y=rnorm(3,mean=0.05,sd=0.05),sample="b")
 dfc<-data.frame(x=rnorm(5,mean=0.95,sd=0.05),y=rnorm(5,mean=0.95,sd=0.05),sample="c")
 df_tot<-rbind(dfa,dfb,dfc)
 df_tot$sample[9]<-"uncertain"
-ggpar(ggscatter(df_tot,x="x",y="y",color = "sample",palette=c("blue","red","black","yellow")),xlab="SNP1",ylab="SNP2")
+gg<-ggpar(ggscatter(df_tot,x="x",y="y",color = "sample",palette=c("blue","red","black","orange"),label='sample',repel = TRUE),xlab="SNP1",ylab="SNP2")
+gg+rremove('legend') + scale_y_continuous(breaks=2,limits=c(0,1)) + scale_x_continuous(breaks=2,limits=c(0,1))
 ````
 
 ````{r}

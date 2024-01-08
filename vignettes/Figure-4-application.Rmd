@@ -17,6 +17,7 @@ knitr::opts_chunk$set(
 ```{r setup}
 library(demuxSNPpaperfigures)
 library(CiteFuse)
+library(viridisLite)
 ```
 
 ````{r}
@@ -220,7 +221,7 @@ df_j<-data.frame(t(hto_jnorm))
 # Negative SNP heatmap
 
 ````{r}
-library(viridisLite)
+library(ComplexHeatmap)
 sce_negative<-sce[,sce$hash.ID=="Negative" & c(sce$percent_mito<15 | sce$lib_size>1000)]
 ha = HeatmapAnnotation(demuxSNP = sce_negative$knn, 
                        HTODemux = sce_negative$hash.ID,
@@ -230,7 +231,7 @@ ha = HeatmapAnnotation(demuxSNP = sce_negative$knn,
                           )
                       ),
                       col=list(demuxSNP=colors_hashtags,HTODemux=colors_hashtags),
-                      show_legend = c(TRUE,FALSE)
+                      show_legend = c(FALSE,FALSE)
 )
 hm<-Heatmap(counts(altExp(sce_negative,"SNP")),
         cluster_rows = FALSE,
@@ -307,7 +308,7 @@ c_full<-cbind(centroid1,centroid2)
 
 ````
 
-````{r fig.height=5,fig.width=5}
+````{r fig.height=5,fig.width=5.5}
 mat<-as.matrix(dist(t(c_full)))
 mat<-mat[-c(2,8),-c(2,8)]
 mat_sub<-mat[1:5,6:10]
@@ -319,7 +320,10 @@ hm<-Heatmap(mat_sub,
         row_title = "Negative reassigned cells",
         heatmap_legend_param = list(title = "Euclidean distance",direction = "horizontal"),
         cell_fun = function(j, i, x, y, w, h, col) { # add text to each grid
-        grid.text(round(mat_sub[i, j],2), x, y)}
+        grid.text(round(mat_sub[i, j],2), x, y)},
+        column_names_rot = 0,
+        column_names_centered = TRUE,
+        show_heatmap_legend = FALSE
     )
 draw(hm,heatmap_legend_side = "bottom")
 ````
@@ -339,7 +343,7 @@ ha = HeatmapAnnotation(demuxSNP = sce_hashtag2$knn,
                           )
                       ),
                       col=list(demuxSNP=colors_hashtags,HTODemux=colors_hashtags),
-                      show_legend = c(TRUE,FALSE)
+                      show_legend = c(FALSE,FALSE)
 )
 
 hm<-Heatmap(counts(altExp(sce_hashtag2,"SNP")),
@@ -427,7 +431,7 @@ c_full<-cbind(centroid1,centroid2)
 
 
 
-````{r fig.height=5,fig.width=5}
+````{r fig.height=4.5,fig.width=5}
 mat<-as.matrix(dist(t(c_full)))
 #mat<-mat[-c(2,8),-c(2,8)]
 mat_sub<-mat[2:5,8:11]
@@ -439,7 +443,10 @@ hm<-Heatmap(mat_sub,
         row_title = "Hashtag2 reassigned cells",
         heatmap_legend_param = list(title = "Euclidean distance",direction = "horizontal"),
         cell_fun = function(j, i, x, y, w, h, col) { # add text to each grid
-        grid.text(round(mat_sub[i, j],2), x, y)}
+        grid.text(round(mat_sub[i, j],2), x, y)},
+        column_names_rot = 0,
+        column_names_centered = TRUE,
+        show_heatmap_legend = FALSE
     )
 draw(hm,heatmap_legend_side = "bottom")
 ````
@@ -464,6 +471,72 @@ db<-dist.binary(data.frame(snps_bin),method = 2)
 dbm<-data.frame(binary_distance=matrix(db))
 
 gghistogram(dbm,x='binary_distance',xlab=c("Binary distance (simple matching coefficient)"))
+````
+
+````{r}
+library(vegan)
+i=1
+hashtags<-paste("Hashtag",1:6,sep="")
+plots<-list()
+for (i in seq_along(hashtags)) {
+ht<-hashtags[i]
+snps<-t(counts(altExp(sce,"SNP")[,sce$hash.ID==ht & sce$lib_size>1500]))
+snps_bin<-snps
+snps_bin[snps==c(-1)]<-0
+
+vdist<-vegdist(snps_bin,method="jaccard",binary=TRUE)
+#hist(vdist)
+
+dbm<-data.frame(binary_distance=matrix(vdist))
+#plot(Heatmap(t(snps_bin),cluster_rows = FALSE,show_column_names = FALSE,show_row_names = FALSE))
+gg<-gghistogram(dbm,x='binary_distance',xlab=c("Binary distance (jaccard)"),fill=dittoColors()[i],alpha = 1)
+#plot(gg)
+#gg2<-ggpar(gg, tickslab = FALSE)
+gg2<-gg+rremove('y.text')
+plot(gg2)
+  plots[[i]]<-gg2
+}
+````
+
+````{r fig.height=7,fig.width=6.5}
+
+grid.arrange(grobs=plots,nrow=3,top=textGrob("Within-group SNP distance distributions for HTODemux", gp=gpar(fontsize=18,font=8)))
+````
+
+````{r}
+hashtags<-c("Hashtag1","Hashtag2","Hashtag3","Hashtag4","Hashtag5","Hashtag6")
+for (i in seq_along(hashtags)) {
+  ht<-hashtags[i]
+  print(ht)
+  match<-sum((as.character(sce$hash.ID)[sce$hash.ID==ht]==as.character(sce$knn)[sce$hash.ID==ht])/length(sce$hash.ID[sce$hash.ID==ht]))
+  print(match)
+}
+
+````
+
+
+````{r}
+
+sce
+Heatmap(counts(altExp(sce[,sce$hash.ID=="Hashtag4"],"SNP")),
+        column_split = sce$hash.ID[sce$hash.ID=="Hashtag4"],
+        cluster_rows = FALSE,
+        show_column_names = FALSE,
+        column_title_rot = 45)
+````
+
+
+````{r}
+
+lgd = Legend(at = c("Hashtag1","Hashtag2","Hashtag3","Hashtag4","Hashtag5","Hashtag6","Doublet","Negative"), title = "Assignment", legend_gp = gpar(fill = dittoColors()[1:8]),nrow=2)
+draw(lgd,test="")
+
+
+col_fun<-colorRamp2(c(0,10),c("white","brown"))
+lgd = Legend(col_fun = col_fun, title = "Euclidean Distance", at = c(0, 10),
+    labels = c("Similar", "Dissimilar"),
+    direction = "horizontal")
+draw(lgd,test="")
 ````
 
 
