@@ -59,28 +59,11 @@ do.call(grid.arrange,c(plot,nrow=1))
 
 ````{r fig.width=12,fig.height=3}
 
-# mat<-logimat(6,nsinglet=c(100,200,1000,400,500,800), ndoub = 500, nneg=50)
-# # size_sig=rep(10,6)
-# # size_bg=rep(20,6)
-# # mu_sig=rep(50,6)
-# # mu_bg=rep(5,6)
-# size_sig=rep(10,6)
-# size_bg=rep(7,6)
-# mu_sig=c(500,500,400,500,200,400)
-# mu_bg=c(110,120,90,100,60,80)
-# counts_low<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_bg = mu_bg, mat = mat, seed = 1)
-# 
-# dim(counts_low)
-# truth_low<-colnames(counts_low)
-# df<-data.frame(t(counts_low))
-# plot<-plot_hashtag(df,ylim=c(0,2000))
-# do.call(grid.arrange,c(plot,nrow=1))
-
-load("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_h/h_final_sce.rdata")
+load("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_e/e_final_sce.rdata")
 df_qual<-perCellQCMetrics(sce)
 sce$qual<-df_qual$sum>1000 | df_qual$detected>750
 table(sce$qual)
-sce<-sce[,sce$qual==TRUE]
+#sce<-sce[,sce$qual==TRUE]
 hto_j<-counts(altExp(sce,"HTO"))
 dim(hto_j)
 df_j<-data.frame(t(hto_j))
@@ -93,74 +76,19 @@ truth_low<-sce$truth
 table(sce$truth)
 ````
 
-````{r}
-load("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_h/h_final_sce.rdata")
-train_cells<-sce$train
-predict_cells<-!sce$train
-k=10
-d=200
-   train <- counts(altExp(sce, "SNP"))[, train_cells == TRUE]
-    train[train == -1] <- 0
-    labels <- sce$labels[train_cells == TRUE]
-    labels <- droplevels(labels)
-    colnames(train) <- labels
-    combs <- expand.grid(levels(labels), levels(labels))
-    combs <- combs[combs$Var1 != combs$Var2, ]
-    p <- combn(unique(combs$Var1), 2)
-    combs_joined <- paste(p[1, ], p[2, ])
-    all <- matrix(data = NA, nrow = dim(altExp(sce, "SNP"))[1], 
-        ncol = d * length(combs_joined))
-    for (i in seq_along(combs_joined)) {
-        l1 <- as.character(combs$Var1[i])
-        l2 <- as.character(combs$Var2[i])
-        d1 <- train[, labels == l1]
-        d2 <- train[, labels == l2]
-        s1 <- sample(seq_len(dim(d1)[2]), d, replace = TRUE)
-        s2 <- sample(seq_len(dim(d2)[2]), d, replace = TRUE)
-        doubs <- d1[, s1] == 1 | d2[, s2] == 1
-        doubs <- doubs * 1
-        doubs[doubs == 0] <- c(0)
-        all[, c(1 + (i - 1) * d):c(d + (i - 1) * d)] <- doubs
-        colnames(all) <- rep("Doublet", dim(all)[2])
-    }
-    train_all <- cbind(train, all)
-    pred <- as.data.frame(counts(altExp(sce, "SNP"))[, predict_cells == 
-        TRUE])
-    pred[pred == -1] <- 0
-    y = as.integer(as.factor(colnames(train_all)))
-    result_kern <- KernelKnn::KernelKnn(data = t(train_all), TEST_data = t(pred), 
-        y = y, k = k, Levels = seq_along(levels(as.factor(colnames(train_all)))), regression = F, method = "jaccard_coefficient")
-    ID <- apply(result_kern, 1, which.max)
-    z <- levels(as.factor(colnames(train_all)))
-    names(z)<-seq_along(z)
-    ID<-recode(as.character(ID), !!!z)
-#> [1] "Apple"  "Banana" "Banana" "Apple"
+## update function to handle this
 
-    sce$knn_jacc <- as.character(sce$labels)
-    sce$knn_jacc[predict_cells == TRUE] <- as.character(as.factor(ID))
-    sce$knn_jacc <- as.factor(sce$knn_jacc)
-  table(sce$knn_jacc,sce$truth)
-  
-  adjustedRandIndex(sce$knn,sce$truth)
-  adjustedRandIndex(sce$knn_jacc,sce$truth)
-  
-  snp<-altExp(sce,"SNP")
-  logcounts(snp)<-counts(snp)
-  snp<-scater::runPCA(snp)
-  snp$class<-sce$truth
-  snp$classdoub<-sce$truthalldoub
-  snp$knn<-sce$knn_jacc
-  snp<-runTSNE(snp)
-  dittoDimPlot(snp,reduction.use="TSNE","class")
-    dittoDimPlot(snp,reduction.use="TSNE","classdoub")
-  dittoDimPlot(snp,reduction.use="TSNE","knn")
-    dittoDimPlot(snp,reduction.use="PCA","knn")
-    
-    sce$truth<-gsub("K","Hashtag",sce$truth)
-    
-    sum(sce$knn==sce$truth)/length(sce$truth)
-    sum(sce$knn_jacc==sce$truth)/length(sce$truth)
+````{r eval=FALSE}
+
+sce$knn[sce$knn=="multiplet"]<-"Doublet"
+sce$knn_jacc[sce$knn_jacc=="multiplet"]<-"Doublet"
+
+
 ````
+
+
+
+
 
 ````{r eval=FALSE}
 methods<-c("htodemux","bff_raw","bff_cluster","dropletutils","multiseq","gmm_demux")
@@ -348,7 +276,7 @@ counts<-draw_counts(size_sig = size_sig, size_bg = size_bg, mu_sig = mu_sig, mu_
 total_nneg<-c()
 total_acc<-c()
 total_nnegpc<-c()
-chr_low$demuxsnp<-sce$knn
+chr_low$demuxsnp<-sce$knn_jacc
 methods=c("htodemux","bff_cluster","bff_raw","gmm_demux","demuxmix","demuxsnp")
 for (i in seq_along(methods)) {
   m<-methods[i]
@@ -504,4 +432,83 @@ ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',labe
 ````
 
 
+````{r}
 
+sce2<-sce[,colSums(counts(sce))>1000]
+library(ComplexHeatmap)
+Heatmap(counts(altExp(sce2,"SNP")),
+        cluster_rows=FALSE,
+        cluster_columns=TRUE,
+        column_split=sce2$truth,
+        column_title_rot = 45)
+````
+
+
+````{r eval=FALSE}
+load("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_h/h_final_sce.rdata")
+train_cells<-sce$train
+predict_cells<-!sce$train
+k=10
+d=200
+   train <- counts(altExp(sce, "SNP"))[, train_cells == TRUE]
+    train[train == -1] <- 0
+    labels <- sce$labels[train_cells == TRUE]
+    labels <- droplevels(labels)
+    colnames(train) <- labels
+    combs <- expand.grid(levels(labels), levels(labels))
+    combs <- combs[combs$Var1 != combs$Var2, ]
+    p <- combn(unique(combs$Var1), 2)
+    combs_joined <- paste(p[1, ], p[2, ])
+    all <- matrix(data = NA, nrow = dim(altExp(sce, "SNP"))[1], 
+        ncol = d * length(combs_joined))
+    for (i in seq_along(combs_joined)) {
+        l1 <- as.character(combs$Var1[i])
+        l2 <- as.character(combs$Var2[i])
+        d1 <- train[, labels == l1]
+        d2 <- train[, labels == l2]
+        s1 <- sample(seq_len(dim(d1)[2]), d, replace = TRUE)
+        s2 <- sample(seq_len(dim(d2)[2]), d, replace = TRUE)
+        doubs <- d1[, s1] == 1 | d2[, s2] == 1
+        doubs <- doubs * 1
+        doubs[doubs == 0] <- c(0)
+        all[, c(1 + (i - 1) * d):c(d + (i - 1) * d)] <- doubs
+        colnames(all) <- rep("Doublet", dim(all)[2])
+    }
+    train_all <- cbind(train, all)
+    pred <- as.data.frame(counts(altExp(sce, "SNP"))[, predict_cells == 
+        TRUE])
+    pred[pred == -1] <- 0
+    y = as.integer(as.factor(colnames(train_all)))
+    result_kern <- KernelKnn::KernelKnn(data = t(train_all), TEST_data = t(pred), 
+        y = y, k = k, Levels = seq_along(levels(as.factor(colnames(train_all)))), regression = F, method = "jaccard_coefficient")
+    ID <- apply(result_kern, 1, which.max)
+    z <- levels(as.factor(colnames(train_all)))
+    names(z)<-seq_along(z)
+    ID<-recode(as.character(ID), !!!z)
+#> [1] "Apple"  "Banana" "Banana" "Apple"
+
+    sce$knn_jacc <- as.character(sce$labels)
+    sce$knn_jacc[predict_cells == TRUE] <- as.character(as.factor(ID))
+    sce$knn_jacc <- as.factor(sce$knn_jacc)
+  table(sce$knn_jacc,sce$truth)
+  library(mclust)
+  adjustedRandIndex(sce$knn,sce$truth)
+  adjustedRandIndex(sce$knn_jacc,sce$truth)
+  
+  snp<-altExp(sce,"SNP")
+  logcounts(snp)<-counts(snp)
+  snp<-scater::runPCA(snp)
+  snp$class<-sce$truth
+  snp$classdoub<-sce$truthalldoub
+  snp$knn<-sce$knn_jacc
+  snp<-runTSNE(snp)
+  dittoDimPlot(snp,reduction.use="TSNE","class")
+    dittoDimPlot(snp,reduction.use="TSNE","classdoub")
+  dittoDimPlot(snp,reduction.use="TSNE","knn")
+    dittoDimPlot(snp,reduction.use="PCA","knn")
+    
+    sce$truth<-gsub("K","Hashtag",sce$truth)
+    
+    sum(sce$knn==sce$truth)/length(sce$truth)
+    sum(sce$knn_jacc==sce$truth)/length(sce$truth)
+````

@@ -37,7 +37,7 @@ collect_soup<-function(ndoub,ds,key) {
   library(caret)
   library(mclust)
   n<-ndoub
-  ari_n<-c(); recall_n<-c();precision_n<-c()
+  ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
   
   for (i in seq_along(key)) {
   ## ground truth
@@ -52,7 +52,7 @@ collect_soup<-function(ndoub,ds,key) {
   souporcell$assignment[souporcell$status=="doublet"]<-"Doublet"
   souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
 
-  ## recode souporcell labels (need to add if else to handle souporcell missing a cluster)
+  ## recode souporcell labels
   t<-table(label,souporcell$assignment)
   k<-t[grep("[0-9]",rownames(t)),grep("[0-9]",colnames(t))]
   kp<-proportions(k+1,1)
@@ -75,15 +75,17 @@ collect_soup<-function(ndoub,ds,key) {
   data=factor(soup_new, levels=sort(union(soup_new,label)))
   ref=factor(label, levels=sort(union(soup_new,label)))
   ari<-adjustedRandIndex(data,ref)
+  acc<-accuracy_vec(data,ref)
   cf<-confusionMatrix(data=data,reference=ref)
   prec<-cf$byClass[3,5]
   rec<-cf$byClass[3,6]
   print(ari)
   ari_n[i]<-ari
+  acc_n[i]<-acc
   recall_n[i]<-rec
   precision_n[i]<-prec
   print(key[i])
-  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n)
+  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
 }
 return(res)
 }
@@ -152,7 +154,7 @@ collect_demuxsnp<-function(ndoub,ds,key) {
   library(caret)
   library(mclust)
   n<-ndoub
-  ari_n<-c(); recall_n<-c();precision_n<-c()
+  ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
   
   for (i in seq_along(key)) {
   ## ground truth
@@ -161,12 +163,13 @@ collect_demuxsnp<-function(ndoub,ds,key) {
   label<-substr(doublet_barcodes$barcode,start=18,stop=19)
   label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
   
-  ## souporcell results
+  ## demuxSNP results
   demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key[i],"/",key[i],"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
-  
+  demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
+  demuxsnp$demuxSNP_jacc[demuxsnp$demuxSNP_jacc=="negative"]<-"Doublet" ##remove when rerun
   t<-table(label,demuxsnp$demuxSNP)
 
-  ds_reorder<-demuxsnp$demuxSNP[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
+  ds_reorder<-demuxsnp$demuxSNP_jacc[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
   ds_recode<-gsub("Hashtag","K",ds_reorder)
   print(table(label))
  
@@ -174,15 +177,17 @@ collect_demuxsnp<-function(ndoub,ds,key) {
   data=factor(ds_recode, levels=sort(union(ds_recode,label)))
   ref=factor(label, levels=sort(union(ds_recode,label)))
   ari<-adjustedRandIndex(data,ref)
+  acc<-accuracy_vec(data,ref)
   cf<-confusionMatrix(data=data,reference=ref)
   prec<-cf$byClass[3,5]
   rec<-cf$byClass[3,6]
   print(ari)
   ari_n[i]<-ari
+  acc_n[i]<-acc
   recall_n[i]<-rec
   precision_n[i]<-prec
   print(key[i])
-  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n)
+  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
 }
 return(res)
 }
@@ -203,8 +208,7 @@ plot(n,ccrcc_ari$precision,xlab="doublet rate")
 
 df_p=data.frame(key=key,doublets=n,metric=ccrcc_ari$precision,type="precision",algorithm="souporcell")
 df_r=data.frame(key=key,doublets=n,metric=ccrcc_ari$recall,type="recall",algorithm="souporcell")
-df<-rbind(df_p,df_r)
-ggline(data=df, x="doublets", y="metric", linetype="type", xlab = "% doublets")
+df_soup<-rbind(df_p,df_r)
 ````
 
 ````{r fig.width=4,fig.height=4}
@@ -219,8 +223,7 @@ plot(n,ccrcc_vireo$precision,xlab="doublet rate")
 
 df_p=data.frame(key=key,doublets=n,metric=ccrcc_vireo$precision,type="precision",algorithm="vireo")
 df_r=data.frame(key=key,doublets=n,metric=ccrcc_vireo$recall,type="recall",algorithm="vireo")
-df<-rbind(df_p,df_r)
-ggline(data=df, x="doublets", y="metric", linetype="type", xlab = "% doublets")
+df_vireo<-rbind(df_p,df_r)
 ````
 
 ````{r}
@@ -242,15 +245,15 @@ ggline(data=df_demuxsnp, x="doublets", y="metric", linetype="type", xlab = "% do
 
 ````{r}
 
-df_all<-rbind(df,df_demuxsnp)
+df_all<-rbind(df_soup,df_demuxsnp)
 head(df_all)
 df_all$split<-paste(df_all$type,df_all$algorithm,sep="")
 ggline(data=df_all, x="doublets", y="metric", linetype="algorithm", xlab = "% doublets",color="algorithm",facet.by="type")
 ````
 
 ````{r}
-key="h"
-n=40
+key="i"
+n=45
 
 #load ground truth
   lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
@@ -259,6 +262,8 @@ n=40
   label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
 # load demuxsnp from key
 demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+  demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
+  demuxsnp$demuxSNP_jacc[demuxsnp$demuxSNP_jacc=="negative"]<-"Doublet" ##remove when rerun
 ds_reorder<-demuxsnp$demuxSNP[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
 ds_recode<-gsub("Hashtag","K",ds_reorder)
 
@@ -371,13 +376,23 @@ DT$method<-"souporcell"
 DT$method[grep("demuxSNP_",DT$FileName)]<-"demuxSNP"
 DT$method[grep("vireo_",DT$FileName)]<-"vireo"
 DT$time<-DT$V1/60/60
+DT<-DT[DT$method!="vireo",]
 ggpar(ggbarplot(DT,x="method",y="time", add = c("mean_se", "jitter"),color="method",position=position_dodge()),ylim=c(0,max(DT$time)),ylab=c("time (h)"))
 ````
 
 
 
-````{r}
+````{r fig.height=4,fig.width=7}
+n=c(5,10,15,20,25,30,35,40,45,50)
+df_a=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$acc,type="acc",algorithm="demuxSNP")
+df_b=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$ari,type="ari",algorithm="demuxSNP")
+df_demuxsnp<-rbind(df_a,df_b)
 
+df_a=data.frame(key=key,doublets=n,metric=ccrcc_ari$acc,type="acc",algorithm="souporcell")
+df_b=data.frame(key=key,doublets=n,metric=ccrcc_ari$ari,type="ari",algorithm="souporcell")
+df_soup<-rbind(df_a,df_b)
 
+df_all<-rbind(df_demuxsnp,df_soup)
 
+ggline(data=df_all, x="doublets", y="metric", linetype="algorithm", xlab = "% doublets",color="algorithm",facet.by="type")
 ````
