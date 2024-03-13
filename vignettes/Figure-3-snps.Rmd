@@ -23,233 +23,397 @@ library(ggalluvial)
 library(data.table)
 ```
 
-
-
-
-
 ## Functions
 
 ````{r}
 
-collect_soup<-function(ndoub,ds,key) {
+
+collect_soup <- function(ndoub, key, seed) {
   library(readr)
   library(dplyr)
   library(caret)
   library(mclust)
-  n<-ndoub
-  ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
+  n <- ndoub
+  df_full <- data.frame()
   
   for (i in seq_along(key)) {
-  ## ground truth
-  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
-  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
-  label<-substr(doublet_barcodes$barcode,start=18,stop=19)
-  #label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
-  label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
-  
-  ## souporcell results
-  souporcell<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/soup_",key[i],"_",n[i],"/clusters.tsv",sep=""), sep='\t',header=TRUE)
-  souporcell$assignment[souporcell$status=="doublet"]<-"Doublet"
-  souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
-
-  ## recode souporcell labels
-  t<-table(label,souporcell$assignment)
-  k<-t[grep("[0-9]",rownames(t)),grep("[0-9]",colnames(t))]
-  kp<-proportions(k+1,1)
-
-  m<-max.col(kp)
-  vals<-kp[cbind(seq_along(m),m)]
-  m[which.min(vals)]<-c(setdiff(seq_along(m),m[-c(which.min(vals))]))
-
-  y<-rownames(kp)
-  z<-colnames(kp)[m]
-  w<-as.character(z)
-  names(w)<-as.character(y)
-  soup_new<-recode(souporcell$assignment,!!!setNames(y,z))
-
-  print(table(label))
-  print(table(soup_new))
-  print(table(label,soup_new))
- 
-    ## evaluate performance
-  data=factor(soup_new, levels=sort(union(soup_new,label)))
-  ref=factor(label, levels=sort(union(soup_new,label)))
-  ari<-adjustedRandIndex(data,ref)
-  acc<-accuracy_vec(data,ref)
-  cf<-confusionMatrix(data=data,reference=ref)
-  prec<-cf$byClass[3,5]
-  rec<-cf$byClass[3,6]
-  print(ari)
-  ari_n[i]<-ari
-  acc_n[i]<-acc
-  recall_n[i]<-rec
-  precision_n[i]<-prec
-  print(key[i])
-  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
+    ## ground truth
+    lookup <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        show_col_types = FALSE
+      )
+    doublet_barcodes <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        col_names = "barcode",
+        show_col_types = FALSE
+      )
+    label <- substr(doublet_barcodes$barcode,
+                    start = 18,
+                    stop = 19)
+    #label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+    label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original, 18, 19) !=
+                                                             substr(lookup$replacement, 18, 19)]] <-
+      "Doublet"
+    
+    ## souporcell results, looping through different seeds
+    for (j in seq_along(seed)) {
+      s <- seed[j]
+      souporcell <-
+        read.table(
+          file = paste(
+            "/data/projects/demuxSNP/nextflow/ccrcc_out/soup_",
+            key[i],
+            "_",
+            n[i],
+            "_",
+            s,
+            "/clusters.tsv",
+            sep = ""
+          ),
+          sep = '\t',
+          header = TRUE
+        )
+      souporcell$assignment[souporcell$status == "doublet"] <-
+        "Doublet"
+      souporcell$assignment[souporcell$status == "unassigned"] <-
+        "unassigned"
+      
+      ## recode souporcell labels
+      t <- table(label, souporcell$assignment)
+      k <- t[grep("[0-9]", rownames(t)), grep("[0-9]", colnames(t))]
+      kp <- proportions(k + 1, 1)
+      
+      m <- max.col(kp)
+      vals <- kp[cbind(seq_along(m), m)]
+      m[which.min(vals)] <-
+        c(setdiff(seq_along(m), m[-c(which.min(vals))]))
+      
+      y <- rownames(kp)
+      z <- colnames(kp)[m]
+      w <- as.character(z)
+      names(w) <- as.character(y)
+      soup_new <- recode(souporcell$assignment,!!!setNames(y, z))
+      
+      print(table(label))
+      print(table(soup_new))
+      print(table(label, soup_new))
+      
+      ## evaluate performance
+      data = factor(soup_new, levels = sort(union(soup_new, label)))
+      ref = factor(label, levels = sort(union(soup_new, label)))
+      ari <- adjustedRandIndex(data, ref)
+      acc <- accuracy_vec(data, ref)
+      cf <- confusionMatrix(data = data, reference = ref)
+      prec <- cf$byClass[3, 5]
+      rec <- cf$byClass[3, 6]
+      # print(ari)
+      # ari_n[i]<-ari
+      # acc_n[i]<-acc
+      # recall_n[i]<-rec
+      # precision_n[i]<-prec
+      # print(key[i])
+      # res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
+      df <- data.frame(
+        key = key[i],
+        doublets = n[i],
+        accuracy = acc,
+        ari = ari,
+        precision = prec,
+        recall = rec,
+        seed = s
+      )
+      df_full <- rbind(df_full, df)
+    }
+  }
+  return(df_full)
 }
-return(res)
-}
 
-collect_vireo<-function(ndoub,ds,key) {
+
+
+collect_vireo <- function(ndoub, key, seed) {
   library(readr)
   library(dplyr)
   library(caret)
   library(mclust)
-  n<-ndoub
-  ari_n<-c(); recall_n<-c();precision_n<-c()
-  
+  n <- ndoub
+  #ari_n<-c(); recall_n<-c();precision_n<-c()
+  df_full <- data.frame()
   for (i in seq_along(key)) {
-  ## ground truth
-  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
-  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
-  label<-substr(doublet_barcodes$barcode,start=18,stop=19)
-  #label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
-  label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
-  
-  ## souporcell results
-  vireo<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/vireo_",key[i],"_",n[i],"/donor_ids.tsv",sep=""), sep='\t',header=TRUE)
-  vireo<-vireo[match(doublet_barcodes$barcode,vireo$cell),]
-  vireo$donor_id[vireo$donor_id=="doublet"]<-"Doublet"
-  #souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
-
-  ## recode souporcell labels (need to add if else to handle souporcell missing a cluster)
-  t<-table(label,vireo$donor_id)
-  k<-t[grep("[0-9]",rownames(t)),grep("[0-9]",colnames(t))]
-  kp<-proportions(k+1,1)
-
-  m<-max.col(kp)
-  vals<-kp[cbind(seq_along(m),m)]
-  m[which.min(vals)]<-c(setdiff(seq_along(m),m[-c(which.min(vals))]))
-
-  y<-rownames(kp)
-  z<-colnames(kp)[m]
-  w<-as.character(z)
-  names(w)<-as.character(y)
-  vireo_new<-recode(vireo$donor_id,!!!setNames(y,z))
-
-  print(table(label))
-  print(table(vireo_new))
-  print(table(label,vireo_new))
- 
-    ## evaluate performance
-  data=factor(vireo_new, levels=sort(union(vireo_new,label)))
-  ref=factor(label, levels=sort(union(vireo_new,label)))
-  ari<-adjustedRandIndex(data,ref)
-  cf<-confusionMatrix(data=data,reference=ref)
-  prec<-cf$byClass[3,5]
-  rec<-cf$byClass[3,6]
-  print(ari)
-  ari_n[i]<-ari
-  recall_n[i]<-rec
-  precision_n[i]<-prec
-  print(key[i])
-  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n)
+    ## ground truth
+    lookup <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        show_col_types = FALSE
+      )
+    doublet_barcodes <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        col_names = "barcode",
+        show_col_types = FALSE
+      )
+    label <- substr(doublet_barcodes$barcode,
+                    start = 18,
+                    stop = 19)
+    #label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+    label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original, 18, 19) !=
+                                                             substr(lookup$replacement, 18, 19)]] <- "Doublet"
+    
+    ## souporcell results
+    for (j in seq_along(seed)) {
+      s<-seed[j]
+      vireo <-
+        read.table(
+          file = paste(
+            "/data/projects/demuxSNP/nextflow/ccrcc_out/vireo_",
+            key[i],
+            "_",
+            n[i],
+            "_",
+            s,
+            "/donor_ids.tsv",
+            sep = ""
+          ),
+          sep = '\t',
+          header = TRUE
+        )
+      vireo <- vireo[match(doublet_barcodes$barcode, vireo$cell), ]
+      vireo$donor_id[vireo$donor_id == "doublet"] <- "Doublet"
+      #souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
+      
+      ## recode souporcell labels (need to add if else to handle souporcell missing a cluster)
+      t <- table(label, vireo$donor_id)
+      k <- t[grep("[0-9]", rownames(t)), grep("[0-9]", colnames(t))]
+      kp <- proportions(k + 1, 1)
+      
+      m <- max.col(kp)
+      vals <- kp[cbind(seq_along(m), m)]
+      m[which.min(vals)] <-
+        c(setdiff(seq_along(m), m[-c(which.min(vals))]))
+      
+      y <- rownames(kp)
+      z <- colnames(kp)[m]
+      w <- as.character(z)
+      names(w) <- as.character(y)
+      vireo_new <- recode(vireo$donor_id, !!!setNames(y, z))
+      
+      print(table(label))
+      print(table(vireo_new))
+      print(table(label, vireo_new))
+      
+      ## evaluate performance
+      data = factor(vireo_new, levels = sort(union(vireo_new, label)))
+      ref = factor(label, levels = sort(union(vireo_new, label)))
+      ari <- adjustedRandIndex(data, ref)
+      acc <- accuracy_vec(data, ref)
+      cf <- confusionMatrix(data = data, reference = ref)
+      prec <- cf$byClass[3, 5]
+      rec <- cf$byClass[3, 6]
+      # print(ari)
+      # ari_n[i]<-ari
+      # recall_n[i]<-rec
+      # precision_n[i]<-prec
+      # print(key[i])
+      # res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n)
+      df <- data.frame(
+        key = key[i],
+        doublets = n[i],
+        accuracy = acc,
+        ari = ari,
+        precision = prec,
+        recall = rec,
+        seed = s
+      )
+      df_full <- rbind(df_full, df)
+    }
+  }
+  return(df_full)
 }
-return(res)
-}
 
-collect_demuxsnp<-function(ndoub,ds,key) {
+collect_demuxsnp <- function(ndoub, key, seed) {
   library(readr)
   library(dplyr)
   library(caret)
   library(mclust)
-  n<-ndoub
-  ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
+  n <- ndoub
+  #ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
+  df_full <- data.frame()
   
   for (i in seq_along(key)) {
-  ## ground truth
-  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key[i],"_", n[i],"pc.tsv",sep=""),show_col_types = FALSE)
-  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key[i],"_", n[i], "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
-  label<-substr(doublet_barcodes$barcode,start=18,stop=19)
-  label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
-  
-  ## demuxSNP results
-  demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key[i],"/",key[i],"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
-  demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
-  demuxsnp$demuxSNP_jacc[demuxsnp$demuxSNP_jacc=="negative"]<-"Doublet" ##remove when rerun
-  t<-table(label,demuxsnp$demuxSNP)
+    ## ground truth
+    lookup <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        show_col_types = FALSE
+      )
+    doublet_barcodes <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        col_names = "barcode",
+        show_col_types = FALSE
+      )
+    label <- substr(doublet_barcodes$barcode,
+                    start = 18,
+                    stop = 19)
+    label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original, 18, 19) !=
+                                                             substr(lookup$replacement, 18, 19)]] <- "Doublet"
+    
+    ## demuxSNP results
+    for (j in seq_along(seed)) {
+      s <- seed[j]
+      demuxsnp <-
+        read.table(
+          file = paste(
+            "/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",
+            key[i],
+            "_",
+            n[i],
+            "_",
+            s,
+            "/",
+            key[i],
+            "_demuxSNP.tsv",
+            sep = ""
+          ),
+          sep = ' ',
+          header = TRUE
+        )
+      #demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
+      #demuxsnp$demuxSNP_balanced[demuxsnp$demuxSNP_jacc=="negative"]<-"Doublet" ##remove when rerun
+      t <- table(label, demuxsnp$demuxSNP)
+      
+      ds_reorder <-
+        demuxsnp$demuxSNP_balanced[match(
+          substr(
+            doublet_barcodes$barcode,
+            start = 1,
+            stop = 16
+          ),
+          substr(demuxsnp$barcode, start = 1, stop = 16)
+        )]
+      ds_recode <- gsub("Hashtag", "K", ds_reorder)
+      print(table(label))
+      
+      ## evaluate performance
+      data = factor(ds_recode, levels = sort(union(ds_recode, label)))
+      ref = factor(label, levels = sort(union(ds_recode, label)))
+      ari <- adjustedRandIndex(data, ref)
+      acc <- accuracy_vec(data, ref)
+      cf <- confusionMatrix(data = data, reference = ref)
+      prec <- cf$byClass[3, 5]
+      rec <- cf$byClass[3, 6]
+      # print(ari)
+      # ari_n[i]<-ari
+      # acc_n[i]<-acc
+      # recall_n[i]<-rec
+      # precision_n[i]<-prec
+      # print(key[i])
+      # res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
+      df <- data.frame(
+        key = key[i],
+        doublets = n[i],
+        accuracy = acc,
+        ari = ari,
+        precision = prec,
+        recall = rec,
+        seed = s
+      )
+      df_full <- rbind(df_full, df)
+    }
+  }
+  return(df_full)
+}
 
-  ds_reorder<-demuxsnp$demuxSNP_jacc[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
-  ds_recode<-gsub("Hashtag","K",ds_reorder)
-  print(table(label))
- 
-  ## evaluate performance
-  data=factor(ds_recode, levels=sort(union(ds_recode,label)))
-  ref=factor(label, levels=sort(union(ds_recode,label)))
-  ari<-adjustedRandIndex(data,ref)
-  acc<-accuracy_vec(data,ref)
-  cf<-confusionMatrix(data=data,reference=ref)
-  prec<-cf$byClass[3,5]
-  rec<-cf$byClass[3,6]
-  print(ari)
-  ari_n[i]<-ari
-  acc_n[i]<-acc
-  recall_n[i]<-rec
-  precision_n[i]<-prec
-  print(key[i])
-  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
-}
-return(res)
-}
 
 ````
 
 
 
-````{r fig.width=4,fig.height=4}
+````{r}
 
-n=c(5,10,15,20,25,30,35,40,45,50)
-ds=c(2500,500,250,125)
-key=c("a","b","c","d","e","f","g","h","i","j")
+n = c(5, 10, 15, 20, 25, 30, 35, 40, 45, 50)
+key = c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
+ccrcc_soup <- collect_soup(ndoub = n,
+                           key = key,
+                           seed = 1:5)
+ccrcc_vireo <- collect_vireo(ndoub = n,
+                           key = key,
+                           seed = 1:5)
+ccrcc_demuxsnp <- collect_demuxsnp(ndoub = n,
+                           key = key,
+                           seed = 1:5)
 
-ccrcc_ari<-collect_soup(ndoub=n,ds=ds,key=key)
+ccrcc_soup$method<-"souporcell"
+ccrcc_vireo$method<-"vireo"
+ccrcc_demuxsnp$method<-"demuxSNP"
 
-plot(n,ccrcc_ari$precision,xlab="doublet rate")
-
-df_p=data.frame(key=key,doublets=n,metric=ccrcc_ari$precision,type="precision",algorithm="souporcell")
-df_r=data.frame(key=key,doublets=n,metric=ccrcc_ari$recall,type="recall",algorithm="souporcell")
-df_soup<-rbind(df_p,df_r)
-````
-
-````{r fig.width=4,fig.height=4}
-
-n=c(5,10,15,20,25,30,35,40,45,50)
-ds=c(2500,500,250,125)
-key=c("a","b","c","d","e","f","g","h","i","j")
-
-ccrcc_vireo<-collect_vireo(ndoub=n,ds=ds,key=key)
-
-plot(n,ccrcc_vireo$precision,xlab="doublet rate")
-
-df_p=data.frame(key=key,doublets=n,metric=ccrcc_vireo$precision,type="precision",algorithm="vireo")
-df_r=data.frame(key=key,doublets=n,metric=ccrcc_vireo$recall,type="recall",algorithm="vireo")
-df_vireo<-rbind(df_p,df_r)
+ccrcc_all<-rbind(ccrcc_soup,ccrcc_demuxsnp)
 ````
 
 ````{r}
 
-n=c(5,10,15,20,25,30,35,40,45,50)
-ds=c(2500,500,250,125)
-key=c("a","b","c","d","e","f","g","h","i","j")
+head(ccrcc_all)
+g1<-ggline(data=ccrcc_all, x="doublets", y="accuracy", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="Accuracy")
+g2<-ggline(data=ccrcc_all, x="doublets", y="ari", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="Adjusted Rand Index")
 
-ccrcc_demuxsnp<-collect_demuxsnp(ndoub=n,ds=ds,key=key)
+ggarrange(ggpar(g1,ylim = c(0.5,1)),ggpar(g2,ylim=c(0.5,1)),common.legend = TRUE)
+````
 
-plot(n,ccrcc_demuxsnp$precision,xlab="doublet rate")
 
-df_p=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$precision,type="precision",algorithm="demuxSNP")
-df_r=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$recall,type="recall",algorithm="demuxSNP")
-df_demuxsnp<-rbind(df_p,df_r)
-ggline(data=df_demuxsnp, x="doublets", y="metric", linetype="type", xlab = "% doublets")
+````{r fig.height=7,fig.width=4}
+
+head(ccrcc_all)
+g1<-ggline(data=ccrcc_all, x="doublets", y="precision", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="K2 Precision")
+g2<-ggline(data=ccrcc_all, x="doublets", y="recall", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="K2 Recall")
+
+ggarrange(ggpar(g1,ylim = c(0,1)),ggpar(g2,ylim=c(0,1)),common.legend = TRUE,ncol=1)
 
 ````
 
-````{r}
 
-df_all<-rbind(df_soup,df_demuxsnp)
-head(df_all)
-df_all$split<-paste(df_all$type,df_all$algorithm,sep="")
-ggline(data=df_all, x="doublets", y="metric", linetype="algorithm", xlab = "% doublets",color="algorithm",facet.by="type")
-````
 
 ````{r}
 key="i"
@@ -259,7 +423,9 @@ n=45
   lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
   doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key,"_", n, "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
   label<-substr(doublet_barcodes$barcode,start=18,stop=19)
-  label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+  msms<-substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)
+  label[doublet_barcodes$barcode %in% lookup$replacement[msms]]<-"Doublet"
+  
 # load demuxsnp from key
 demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
   demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
@@ -311,16 +477,6 @@ compar<-compar[c(grep("K",compar$group), grep("Doublet",compar$group)),]
 compar$group<-factor(compar$group,levels=c("K1","K2","K3","K4","K5","K6","Doublet"))
 
 
-ggscatter(compar,x='Recall',y='Precision',color = 'algorithm',shape='group',label='group',palette = dittoColors(),size=4,legend="right",ellipse=TRUE,ellipse.type = "convex")+ xlim(0,1)+ylim(0,1)
-
-ggscatter(compar,x='Recall',y='Precision',color = 'group',shape='algorithm',label='group',palette = dittoColors(),size=4,legend="right")+ xlim(0,1)+ylim(0,1)
-
-ggboxplot(compar,x='algorithm',y='Precision', add = c("mean_se", "jitter"),color="algorithm", label='group',repel=TRUE)
-
-ggboxplot(compar,x='algorithm',y='Recall', add = c("mean_se", "jitter"),color="algorithm", label='group',repel=TRUE)
-
-sum(as.character(soup_factor)==as.character(labels2))/length(soup_factor)
-sum(as.character(ds_factor)==as.character(labels2))/length(soup_factor)
 ````
 
 
@@ -338,24 +494,50 @@ ggbarplot(df,x='group',y='count',fill = "correct" ,legend="right",orientation = 
 
 
 
-````{r fig.height=3,fig.width=10}
+````{r fig.height=7,fig.width=6}
 
 
 df<-data.frame(soup=soup_factor,truth=labels2)
 df<-as.data.frame(table(soup_factor,labels2))
-df$result<-c(df$soup_factor==df$labels2)
-ggplot(data = df,
-       aes(axis1 = soup_factor, axis2 = labels2, y = Freq)) +
-  geom_alluvium(aes(fill = result)) +
-  geom_stratum() +
+df$assignment<-c(df$soup_factor==df$labels2)
+df$assignment<-as.character(df$assignment)
+df$Assignment<-recode(df$assignment,"TRUE"="correct","FALSE"="incorrect")
+alluvial<-ggplot(data = df,
+       aes(axis1 = labels2, axis2 = soup_factor, y = Freq)) +
+  geom_alluvium(aes(fill = Assignment)) +
+scale_fill_manual(values = c('correct' = "grey", 'incorrect' = "red")) +
+#  guides(fill = "none") +
+  geom_stratum()+
   geom_text(stat = "stratum",
             aes(label = after_stat(stratum))) +
-  scale_x_discrete(limits = c("Souporcell assignment", "Ground truth"),
-                   expand = c(0.15, 0.05)) +
-   coord_flip()
+  scale_x_discrete(limits = c("Ground truth", "Souporcell assignment"),
+                   expand = c(0.15, 0.05))
+
+alluvial
 ````
 
 
+````{r fig.height=7,fig.width=6}
+
+
+df<-data.frame(demuxsnp=demuxsnp,truth=labels2)
+df<-as.data.frame(table(ds_factor,labels2))
+df$assignment<-c(as.character(df$ds_factor)==as.character(df$labels2))
+df$assignment<-as.character(df$assignment)
+df$Assignment<-recode(df$assignment,"TRUE"="correct","FALSE"="incorrect")
+alluvial<-ggplot(data = df,
+       aes(axis1 = labels2, axis2 = ds_factor, y = Freq)) +
+  geom_alluvium(aes(fill = Assignment)) +
+scale_fill_manual(values = c('correct' = "grey", 'incorrect' = "red")) +
+#  guides(fill = "none") +
+  geom_stratum()+
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Ground truth", "demuxSNP assignment"),
+                   expand = c(0.15, 0.05))
+
+alluvial
+````
 
 
 ````{r eval=TRUE, fig.width=3,fig.height=5}
@@ -381,18 +563,3 @@ ggpar(ggbarplot(DT,x="method",y="time", add = c("mean_se", "jitter"),color="meth
 ````
 
 
-
-````{r fig.height=4,fig.width=7}
-n=c(5,10,15,20,25,30,35,40,45,50)
-df_a=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$acc,type="acc",algorithm="demuxSNP")
-df_b=data.frame(key=key,doublets=n,metric=ccrcc_demuxsnp$ari,type="ari",algorithm="demuxSNP")
-df_demuxsnp<-rbind(df_a,df_b)
-
-df_a=data.frame(key=key,doublets=n,metric=ccrcc_ari$acc,type="acc",algorithm="souporcell")
-df_b=data.frame(key=key,doublets=n,metric=ccrcc_ari$ari,type="ari",algorithm="souporcell")
-df_soup<-rbind(df_a,df_b)
-
-df_all<-rbind(df_demuxsnp,df_soup)
-
-ggline(data=df_all, x="doublets", y="metric", linetype="algorithm", xlab = "% doublets",color="algorithm",facet.by="type")
-````
