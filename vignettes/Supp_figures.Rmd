@@ -19,12 +19,6 @@ library(demuxSNPpaperfigures)
 library(demuxSNP)
 ```
 
-Plan for supplementary figures:
-
-Dependence on sequencing depth
-distances between reassigned and high confidence
-HTOreader souporcell comparison on real data?
-
 
 ## Dependence on sequencing depth
 
@@ -167,49 +161,122 @@ plot(bal)
 ### d as a function of n
 
 ````{r}
+
+library("foreach")
+library("doParallel")
+library("ranger")
+library("tidyverse")
+library("kableExtra")
+library('caret')
+````
+
+````{r}
+parallel::detectCores()
+n.cores <- parallel::detectCores() - 1
+#create the cluster
+my.cluster <- parallel::makeCluster(
+  n.cores, 
+  type = "FORK"
+  )
+print(my.cluster)
+doParallel::registerDoParallel(cl = my.cluster)
+foreach::getDoParRegistered()
+foreach::getDoParWorkers()
+#check cluster definition (optional)
+print(my.cluster)
+
+````
+
+### key=h (high doublets)
+````{r}
 library(demuxSNP)
 key<-"h"
 seed<-"2"
 doub<-"40"
 
-nvec<-seq(100,300,10)
-dvec<-seq(20,200,10)
+nvec<-seq(100,300,20)
+dvec<-seq(0.1,0.7,0.05)
 bal1<-matrix(nrow=length(nvec),ncol=length(dvec))
 bal2<-matrix(nrow=length(nvec),ncol=length(dvec))
 path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
-#path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_final_sce.rdata",sep="")
 load(path)
 sce<-sce[,!grepl("K2",sce$truthfull)]
 altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
 sce<-high_conf_calls(sce,pacpt=0.75)
 sce$truth<-gsub("K","Hashtag", sce$truth)
-for (i in seq_along(nvec)) {
-  for (j in seq_along(dvec)) {
-    n<-nvec[i]
-    d<-dvec[j]
-    sce<-reassign_balanced(sce, k=20, d=d, n=n, nmin=100)
-    bal1[i,j]<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
-    sce<-reassign_balanced(sce, k=40, d=d, n=n, nmin=100)
-    bal2[i,j]<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
-    
-    print(paste("i=",i," ,j=",j))
-  }
-}
-rownames(bal1)<-nvec
-colnames(bal1)<-dvec
-rownames(bal2)<-nvec
-colnames(bal2)<-dvec
 
-save(bal1,bal2,file='../data/balanced_nd.rdata')
+system.time(data_h <-
+  foreach(i=seq_along(dvec), .combine='rbind') %:%
+    foreach(j=seq_along(nvec), .combine='cbind', .inorder=FALSE) %dopar% {
+      d<-dvec[i]
+      n<-nvec[j]
+      sce<-reassign_balanced(sce, k=25, d=d, n=n, nmin=100)
+      l1<-unique(as.character(sce$truth))
+      l2<-unique(as.character(sce$knn_balanced))
+      lvls<-union(l1,l2)
+      cf<-confusionMatrix(factor(sce$truth,levels=lvls),factor(sce$knn_balanced,levels=lvls),mode = "prec_recall")
+      f1<-cf$byClass[6,7]
+      #acc<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+    }
+)
+
+colnames(data_h)<-nvec
+rownames(data_h)<-dvec
+data_h
+library(ComplexHeatmap)
+Heatmap(data_h,cluster_rows = FALSE,cluster_columns = FALSE)
+
 
 ````
 
-
+## key=a (low doublets)
 
 ````{r}
-load(file = '../data/balanced_nd.rdata')
+library(demuxSNP)
+key<-"a"
+seed<-"2"
+doub<-"5"
+
+#nvec<-seq(100,300,5)
+#dvec<-seq(20,200,5)
+bal1<-matrix(nrow=length(nvec),ncol=length(dvec))
+bal2<-matrix(nrow=length(nvec),ncol=length(dvec))
+path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
+load(path)
+sce<-sce[,!grepl("K2",sce$truthfull)]
+altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
+sce<-high_conf_calls(sce,pacpt=0.75)
+sce$truth<-gsub("K","Hashtag", sce$truth)
+
+system.time(data_a <-
+  foreach(i=seq_along(dvec), .combine='rbind') %:%
+    foreach(j=seq_along(nvec), .combine='cbind', .inorder=FALSE) %dopar% {
+      d<-dvec[i]
+      n<-nvec[j]
+      sce<-reassign_balanced(sce, k=25, d=d, n=n, nmin=100)
+      l1<-unique(as.character(sce$truth))
+      l2<-unique(as.character(sce$knn_balanced))
+      lvls<-union(l1,l2)
+      cf<-confusionMatrix(factor(sce$truth,levels=lvls),factor(sce$knn_balanced,levels=lvls),mode = "prec_recall")
+      f1<-cf$byClass[6,7]
+      #acc<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+    }
+)
+
+colnames(data_a)<-nvec
+rownames(data_a)<-dvec
+data_a
+Heatmap(data_a,cluster_rows = FALSE,cluster_columns = FALSE)
+
+
+````
+
+````{r}
+#load(file = '../data/balanced_nd.rdata')
 library(ComplexHeatmap)
 library(circlize)
+bal1<-data_a
+bal2<-data_h
 col_fun = colorRamp2(c(0.7, 0.8, 0.9), c("blue", "white", "red"))
 lgd = Legend(col_fun = col_fun, title = "foo")
 h1<-Heatmap(bal1, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun, column_title = "d (doublets simulated per between group pairing)", row_title = "n (rebalanced samples per singlet group)",
@@ -228,69 +295,114 @@ rowMeans(bal2)
 ````{r}
 
 #define data
-df1 <- data.frame(n=nvec,doublets=dvec[max.col(bal1)])
-df2 <- data.frame(n=nvec,doublets=dvec[max.col(bal2)])
-df1$k_value<-"20"
-df2$k_value<-"40"
+df1 <- data.frame(n=nvec,doublets=dvec[max.col(t(bal1))])
+df2 <- data.frame(n=nvec,doublets=dvec[max.col(t(bal2))])
+df1$k_value<-"5% doublets"
+df2$k_value<-"45% doublets"
 df<-rbind(df1,df2)
 #create scatter plot with line of best fit
+library(ggpubr)
 ggscatter(df, x = "n", y = "doublets",col="k_value", add = "reg.line") +
   facet_wrap(~k_value) +
   stat_regline_equation(label.x = 150, label.y = 150)
 ````
 
+check differences between d=0.1n and 0.5n
+
+````{r}
+
+library(demuxSNP)
+keys<-letters[1:10]
+doubs<-seq(5,50,5)
+seed=1
+d_low<-0.1
+d_high<-0.5
+acc_low<-vector(mode="numeric", length=length(keys))
+acc_high<-vector(mode="numeric", length=length(keys))
+system.time(data_test_d <-
+    foreach(i=seq_along(keys), .combine='rbind', .inorder=FALSE) %dopar% {
+      key<-keys[i]
+      doub<-doubs[i]
+      path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
+      load(path)
+      sce<-sce[,!grepl("K2",sce$truthfull)]
+      altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
+      sce<-high_conf_calls(sce,pacpt=0.75)
+      sce$truth<-gsub("K","Hashtag", sce$truth)
+      
+      sce<-reassign_balanced(sce, k=25, d=d_low*150, n=150, nmin=100)
+      acc_low<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+      
+      sce<-reassign_balanced(sce, k=25, d=d_high*150, n=150, nmin=100)
+      acc_high<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+      d1<-data.frame(key=key,doublets=doub,accuracy=acc_high,d="high")
+      d2<-data.frame(key=key,doublets=doub,accuracy=acc_low,d="Low")
+      rbind(d1,d2)
+    }
+)
+
+data_test_d
+````
+
+````{r}
+
+ggpar(ggline(data_test_d,x="doublets",y="accuracy",color="d"),ylim=c(0,1))
 
 
+````
 
 ## Check dependence on k and d at max and min doublets
-
-### Low doublets
 
 ````{r}
 library(demuxSNP)
 key<-"h"
 seed<-"2"
 doub<-"40"
-kvec<-seq(10,400,20)
-nvec<-seq(100,300,10)
-bal1<-matrix(nrow=length(kvec),ncol=length(nvec))
-bal2<-matrix(nrow=length(kvec),ncol=length(nvec))
+kvec<-seq(10,200,5)
+nvec<-seq(100,500,10)
+#bal1<-matrix(nrow=length(kvec),ncol=length(nvec))
+#bal2<-matrix(nrow=length(kvec),ncol=length(nvec))
 path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
-#path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_final_sce.rdata",sep="")
 load(path)
 sce<-sce[,!grepl("K2",sce$truthfull)]
 altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
 sce<-high_conf_calls(sce,pacpt=0.75)
 sce$truth<-gsub("K","Hashtag", sce$truth)
-for (i in seq_along(kvec)) {
-  for (j in seq_along(nvec)) {
-    k<-kvec[i]
-    n<-nvec[j]
-    sce<-reassign_balanced(sce, k=k, d=round(0.55*n), n=n, nmin=100)
-    bal1[i,j]<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
-    sce$labels<-recode_factor(sce$labels,multiplet="Doublet")
-    predict<-sce$labels=="negative" | sce$labels=="uncertain"
-    sce<-reassign_balanced(sce, k=k, d=round(0.55*n), n=n, nmin=100,predict_cells = predict)
-    bal2[i,j]<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
-    
-    print(paste("i=",i," ,j=",j))
-  }
-}
-rownames(bal1)<-kvec
-colnames(bal1)<-nvec
-rownames(bal2)<-kvec
-colnames(bal2)<-nvec
 
-library(ComplexHeatmap)
-library(circlize)
-col_fun = colorRamp2(c(0.7, 0.8, 0.9), c("blue", "white", "red"))
-lgd = Legend(col_fun = col_fun, title = "foo")
-Heatmap(bal1, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun)
-Heatmap(bal2, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun)
+system.time(d <-
+  foreach(i=seq_along(kvec), .combine='rbind') %:%
+    foreach(j=seq_along(nvec), .combine='cbind', .inorder=FALSE) %dopar% {
+      k<-kvec[i]
+      n<-nvec[j]
+      sce<-reassign_balanced(sce, k=k, d=round(0.55*n), n=n, nmin=100)
+      acc<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+      #data.frame(i=i,j=j,k=kvec[i],n=nvec[i],accuracy=acc)
+    }
+)
 
-rowMeans(bal1)
-rowMeans(bal2)
+colnames(d)<-nvec
+rownames(d)<-kvec
+d
+
 ````
+
+````{r fig.height=7,fig.width=12}
+dd<-Heatmap(d,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        column_title = "n (number of cells per group in rebalanced training data",
+        row_title = "k (nearest neighbours)",
+        heatmap_legend_param = list(title = 'accuracy'))
+draw(dd,column_title="Dependence of k on n")
+````
+````{r}
+
+df2 <- data.frame(n=nvec,k=kvec[max.col(t(d))])
+ggscatter(df2,x="n",y="k", add = "reg.line") +
+  stat_regline_equation(label.x = 400, label.y = 14)
+````
+
+
 
 
 ## HTOreader cross-tabulation

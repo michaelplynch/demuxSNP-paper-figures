@@ -373,31 +373,31 @@ collect_demuxsnp <- function(ndoub, key, seed) {
 
 
 ````{r}
-
+library(yardstick)
 n = c(5, 10, 15, 20, 25, 30, 35, 40, 45, 50)
 key = c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
 ccrcc_soup <- collect_soup(ndoub = n,
                            key = key,
-                           seed = 1:5)
-ccrcc_vireo <- collect_vireo(ndoub = n,
-                           key = key,
-                           seed = 1:5)
+                           seed = 1)
+# ccrcc_vireo <- collect_vireo(ndoub = n,
+#                            key = key,
+#                            seed = 1:5)
 ccrcc_demuxsnp <- collect_demuxsnp(ndoub = n,
                            key = key,
                            seed = 1:5)
 
 ccrcc_soup$method<-"souporcell"
-ccrcc_vireo$method<-"vireo"
+#ccrcc_vireo$method<-"vireo"
 ccrcc_demuxsnp$method<-"demuxSNP"
 
 ccrcc_all<-rbind(ccrcc_soup,ccrcc_demuxsnp)
 ````
 
-````{r}
+````{r fig.height=5,fig.width=8}
 
 head(ccrcc_all)
-g1<-ggline(data=ccrcc_all, x="doublets", y="accuracy", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="Accuracy")
-g2<-ggline(data=ccrcc_all, x="doublets", y="ari", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="Adjusted Rand Index")
+g1<-ggline(data=ccrcc_all, x="doublets", y="accuracy", linetype="method", xlab = "% doublets",color="method",add = "mean_sd",title="Accuracy",size=0.5)
+g2<-ggline(data=ccrcc_all, x="doublets", y="ari", linetype="method", xlab = "% doublets",color="method",add = "mean_sd",title="Adjusted Rand Index",size=0.5)
 
 ggarrange(ggpar(g1,ylim = c(0.5,1)),ggpar(g2,ylim=c(0.5,1)),common.legend = TRUE)
 ````
@@ -418,7 +418,7 @@ ggarrange(ggpar(g1,ylim = c(0,1)),ggpar(g2,ylim=c(0,1)),common.legend = TRUE,nco
 ````{r}
 key="i"
 n=45
-
+s=1
 #load ground truth
   lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
   doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key,"_", n, "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
@@ -427,7 +427,24 @@ n=45
   label[doublet_barcodes$barcode %in% lookup$replacement[msms]]<-"Doublet"
   
 # load demuxsnp from key
-demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+#demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"/",key,"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+      demuxsnp <-
+        read.table(
+          file = paste(
+            "/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",
+            key,
+            "_",
+            n,
+            "_",
+            s,
+            "/",
+            key,
+            "_demuxSNP.tsv",
+            sep = ""
+          ),
+          sep = ' ',
+          header = TRUE
+        )
   demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
   demuxsnp$demuxSNP_jacc[demuxsnp$demuxSNP_jacc=="negative"]<-"Doublet" ##remove when rerun
 ds_reorder<-demuxsnp$demuxSNP[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
@@ -435,7 +452,7 @@ ds_recode<-gsub("Hashtag","K",ds_reorder)
 
 #load souporcell from key
 
-souporcell<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/soup_",key,"_",n,"/clusters.tsv",sep=""), sep='\t',header=TRUE)
+souporcell<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_out/soup_",key,"_",n,"_1/clusters.tsv",sep=""), sep='\t',header=TRUE)
 souporcell$assignment[souporcell$status=="doublet"]<-"Doublet"
 souporcell$assignment[souporcell$status=="unassigned"]<-"unassigned"
 
@@ -556,9 +573,9 @@ DT <- rbindlist(sapply(list_of_files, fread, simplify = FALSE),
 
 DT$method<-"souporcell"
 DT$method[grep("demuxSNP_",DT$FileName)]<-"demuxSNP"
-DT$method[grep("vireo_",DT$FileName)]<-"vireo"
+#DT$method[grep("vireo_",DT$FileName)]<-"vireo"
 DT$time<-DT$V1/60/60
-DT<-DT[DT$method!="vireo",]
+#DT<-DT[DT$method!="vireo",]
 ggpar(ggbarplot(DT,x="method",y="time", add = c("mean_se", "jitter"),color="method",position=position_dodge()),ylim=c(0,max(DT$time)),ylab=c("time (h)"))
 ````
 

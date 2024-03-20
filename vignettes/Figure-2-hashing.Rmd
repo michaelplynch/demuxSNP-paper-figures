@@ -69,7 +69,6 @@ table(sce$qual)
 # dim(hto_j)
 # df_j<-data.frame(t(hto_j))
 
-counts_low<-hto_j
 library(stringr)
 sce$truth<-str_replace(sce$truth,"K","Hashtag")
 truth_low<-sce$truth
