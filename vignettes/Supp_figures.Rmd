@@ -188,14 +188,15 @@ print(my.cluster)
 ````
 
 ### key=h (high doublets)
+
 ````{r}
 library(demuxSNP)
 key<-"h"
 seed<-"2"
 doub<-"40"
 
-nvec<-seq(100,300,20)
-dvec<-seq(0.1,0.7,0.05)
+nvec<-seq(100,300,10)
+dvec<-seq(0.1,0.7,0.025)
 bal1<-matrix(nrow=length(nvec),ncol=length(dvec))
 bal2<-matrix(nrow=length(nvec),ncol=length(dvec))
 path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
@@ -277,16 +278,16 @@ library(ComplexHeatmap)
 library(circlize)
 bal1<-data_a
 bal2<-data_h
-col_fun = colorRamp2(c(0.7, 0.8, 0.9), c("blue", "white", "red"))
+col_fun = colorRamp2(c(0.7, 0.75, 0.8), c("blue", "white", "red"))
 lgd = Legend(col_fun = col_fun, title = "foo")
-h1<-Heatmap(bal1, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun, column_title = "d (doublets simulated per between group pairing)", row_title = "n (rebalanced samples per singlet group)",
-        heatmap_legend_param = list(title = "accuracy")
+h1<-Heatmap(bal1, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun, row_title = "d (proportions of n doublets simulated per between group pairing)", column_title = "n (rebalanced samples per singlet group)",
+        heatmap_legend_param = list(title = "f-score")
         )
-h2<-Heatmap(bal2, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun, column_title = "d (doublets simulated per between group pairing)", row_title = "n (rebalanced samples per singlet group)",
-        heatmap_legend_param = list(title = "accuracy"))
+h2<-Heatmap(bal2, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun, row_title = "d (proportion of n doublets simulated per between group pairing)", column_title = "n (rebalanced samples per singlet group)",
+        heatmap_legend_param = list(title = "f-score"))
 
-draw(h1,column_title="demuxSNP accuracy as a function of n and d for k=20")
-draw(h2,column_title="demuxSNP accuracy as a function of n and d for k=40")
+draw(h1,column_title="demuxSNP doublet f-score as a function of n and d for 5% doublets")
+draw(h2,column_title="demuxSNP doublet f-score as a function of n and d for 40% doublets")
 rowMeans(bal1)
 rowMeans(bal2)
 ````
@@ -304,7 +305,7 @@ df<-rbind(df1,df2)
 library(ggpubr)
 ggscatter(df, x = "n", y = "doublets",col="k_value", add = "reg.line") +
   facet_wrap(~k_value) +
-  stat_regline_equation(label.x = 150, label.y = 150)
+  stat_regline_equation(label.x = 150, label.y = 1)
 ````
 
 check differences between d=0.1n and 0.5n
@@ -315,8 +316,8 @@ library(demuxSNP)
 keys<-letters[1:10]
 doubs<-seq(5,50,5)
 seed=1
-d_low<-0.1
-d_high<-0.5
+d_low<-0.2
+d_high<-0.6
 acc_low<-vector(mode="numeric", length=length(keys))
 acc_high<-vector(mode="numeric", length=length(keys))
 system.time(data_test_d <-
@@ -330,10 +331,10 @@ system.time(data_test_d <-
       sce<-high_conf_calls(sce,pacpt=0.75)
       sce$truth<-gsub("K","Hashtag", sce$truth)
       
-      sce<-reassign_balanced(sce, k=25, d=d_low*150, n=150, nmin=100)
+      sce<-reassign_balanced(sce, k=25, d=d_low,nmin=100)
       acc_low<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
       
-      sce<-reassign_balanced(sce, k=25, d=d_high*150, n=150, nmin=100)
+      sce<-reassign_balanced(sce, k=25, d=d_high,nmin=100)
       acc_high<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
       d1<-data.frame(key=key,doublets=doub,accuracy=acc_high,d="high")
       d2<-data.frame(key=key,doublets=doub,accuracy=acc_low,d="Low")
@@ -345,8 +346,10 @@ data_test_d
 ````
 
 ````{r}
-
-ggpar(ggline(data_test_d,x="doublets",y="accuracy",color="d"),ylim=c(0,1))
+library(ggpubr)
+data_test_d$d<-as.character(data_test_d$d)
+data_test_d$d<-recode(data_test_d$d,"Low"="0.2","high"="0.6")
+ggpar(ggline(data_test_d,x="doublets",y="accuracy",color="d"),ylim=c(0,1),main="Accuracy as a function of parameter d")
 
 
 ````
@@ -358,8 +361,8 @@ library(demuxSNP)
 key<-"h"
 seed<-"2"
 doub<-"40"
-kvec<-seq(10,200,5)
-nvec<-seq(100,500,10)
+kvec<-seq(10,200,10)
+nvec<-seq(100,400,10)
 #bal1<-matrix(nrow=length(kvec),ncol=length(nvec))
 #bal2<-matrix(nrow=length(kvec),ncol=length(nvec))
 path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
@@ -374,7 +377,7 @@ system.time(d <-
     foreach(j=seq_along(nvec), .combine='cbind', .inorder=FALSE) %dopar% {
       k<-kvec[i]
       n<-nvec[j]
-      sce<-reassign_balanced(sce, k=k, d=round(0.55*n), n=n, nmin=100)
+      sce<-reassign_balanced(sce, k=k, d=0.5, n=n, nmin=100)
       acc<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
       #data.frame(i=i,j=j,k=kvec[i],n=nvec[i],accuracy=acc)
     }
@@ -398,8 +401,10 @@ draw(dd,column_title="Dependence of k on n")
 ````{r}
 
 df2 <- data.frame(n=nvec,k=kvec[max.col(t(d))])
-ggscatter(df2,x="n",y="k", add = "reg.line") +
-  stat_regline_equation(label.x = 400, label.y = 14)
+ggk<-ggscatter(df2,x="n",y="k", add = "reg.line") +
+  stat_regline_equation(label.x = 100, label.y = 100) +
+  ggtitle('Optimal k as a function of n')
+ggpar(ggk,ylim = c(0,150))
 ````
 
 
