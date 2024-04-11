@@ -1,0 +1,493 @@
+---
+title: "Supp_figures"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Supp_figures}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(demuxSNPpaperfigures)
+library(demuxSNP)
+```
+
+
+## Dependence on sequencing depth
+
+````{r}
+
+collect_demuxsnp<-function(n,key,seqdepth) {
+  library(readr)
+  library(dplyr)
+  library(caret)
+  library(mclust)
+  library(yardstick)
+  ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
+  
+  for (i in seq_along(seqdepth)) {
+  ## ground truth
+  lookup<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",key,"_", n,"pc.tsv",sep=""),show_col_types = FALSE)
+  doublet_barcodes<-read_tsv(paste("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",key,"_", n, "pc.tsv",sep=""),col_names = "barcode",show_col_types = FALSE)
+  label<-substr(doublet_barcodes$barcode,start=18,stop=19)
+  label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original,18,19)!=substr(lookup$replacement,18,19)]]<-"Doublet"
+  
+  ## demuxSNP results
+  demuxsnp<-read.table(file=paste("/data/projects/demuxSNP/nextflow/ccrcc_seqdepth/demuxSNP_",seqdepth[i],"/",seqdepth[i],"_demuxSNP.tsv",sep=""), sep=' ',header=TRUE)
+  demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
+  demuxsnp$demuxSNP_jacc[demuxsnp$demuxSNP_jacc=="negative"]<-"Doublet" ##remove when rerun
+  t<-table(label,demuxsnp$demuxSNP)
+
+  ds_reorder<-demuxsnp$demuxSNP_jacc[match(substr(doublet_barcodes$barcode,start=1,stop=16),substr(demuxsnp$barcode,start=1,stop=16))]
+  ds_recode<-gsub("Hashtag","K",ds_reorder)
+  print(table(label))
+ 
+  ## evaluate performance
+  data=factor(ds_recode, levels=sort(union(ds_recode,label)))
+  ref=factor(label, levels=sort(union(ds_recode,label)))
+  ari<-adjustedRandIndex(data,ref)
+  acc<-accuracy_vec(data,ref)
+  cf<-confusionMatrix(data=data,reference=ref)
+  prec<-cf$byClass[3,5]
+  rec<-cf$byClass[3,6]
+  print(ari)
+  ari_n[i]<-ari
+  acc_n[i]<-acc
+  recall_n[i]<-rec
+  precision_n[i]<-prec
+  print(key[i])
+  res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
+}
+return(res)
+}
+
+````
+
+
+````{r}
+n<-"25"
+key="e"
+seqdepth<-seq(20000,50000,10000)
+
+seqdepth_demuxsnp<-collect_demuxsnp(n=n,key=key, seqdepth = seqdepth)
+
+
+````
+
+````{r}
+seqdepth<-seq(10000,50000,10000)
+for (i in seq_along(seqdepth)) {
+  path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_seqdepth/demuxSNP_",seqdepth[i],"/",seqdepth[i],"_final_sce.rdata",sep="")
+  load(path)
+  print(altExp(sce,"SNP"))
+  snps<-counts(altExp(sce,"SNP"))
+  print(Heatmap(snps,cluster_rows=FALSE,column_split = sce$knn_jacc,show_column_names = FALSE))
+}
+
+````
+
+
+````{r}
+library(ComplexHeatmap)
+library(SCanalysis)
+Heatmap(snps,column_split = colSums(snps!=0)>30,cluster_rows = FALSE, show_column_dend = FALSE, show_column_names = FALSE, show_row_names = FALSE)
+sce<-score_qc(sce)
+
+sce$snpqual<-colSums(snps!=0)>30
+sce$qual<-sce$percentMito<0.2 & sce$nCount_RNA>750
+
+table(sce$snpqual,sce$qual)
+````
+
+## Compare performance across methods (euclidean, jaccard,balanced)
+
+````{r}
+key<-letters[1:8]
+acc<-c()
+jacc<-c()
+bal<-c()
+for (i in seq_along(key)) {
+  print(key[i])
+  path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key[i],"/",key[i],"_final_sce.rdata",sep="")
+  load(path)
+  sce$truth<-gsub("K","Hashtag", sce$truth)
+  
+  sce<-reassign(sce, k=20, d=50)
+  sce<-reassign_jaccard(sce, k=20, d=100)
+  sce<-reassign_balanced(sce, k=20, d=100)
+
+  acc[i]<-sum(sce$knn==sce$truth)/length(sce$truth)
+  jacc[i]<-sum(sce$knn_jacc==sce$truth)/length(sce$truth)
+  bal[i]<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+}
+
+plot(acc)
+plot(jacc)
+plot(bal)
+
+````
+
+````{r}
+
+key<-letters[1:8]
+dvec<-seq(10,150,20)
+bal<-matrix(nrow=length(key),ncol=length(dvec))
+for (i in seq_along(key)) {
+  print(key[i])
+  path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key[i],"/",key[i],"_final_sce.rdata",sep="")
+  load(path)
+  sce$truth<-gsub("K","Hashtag", sce$truth)
+  
+  for (j in seq_along(dvec)) {
+    d<-dvec[j]
+    sce<-reassign_balanced(sce, k=20, d=d)
+    bal[i,j]<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+  }
+
+}
+
+
+plot(bal)
+
+````
+
+### d as a function of n
+
+````{r}
+
+library("foreach")
+library("doParallel")
+library("ranger")
+library("tidyverse")
+library("kableExtra")
+library('caret')
+````
+
+````{r}
+parallel::detectCores()
+n.cores <- parallel::detectCores() - 1
+#create the cluster
+my.cluster <- parallel::makeCluster(
+  n.cores, 
+  type = "FORK"
+  )
+print(my.cluster)
+doParallel::registerDoParallel(cl = my.cluster)
+foreach::getDoParRegistered()
+foreach::getDoParWorkers()
+#check cluster definition (optional)
+print(my.cluster)
+
+````
+
+### key=h (high doublets)
+
+````{r}
+library(demuxSNP)
+key<-"i"
+seed<-"1"
+doub<-"45"
+
+nvec<-seq(100,300,10)
+dvec<-seq(0.1,0.7,0.025)
+bal1<-matrix(nrow=length(nvec),ncol=length(dvec))
+bal2<-matrix(nrow=length(nvec),ncol=length(dvec))
+path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
+load(path)
+sce<-sce[,!grepl("K2",sce$truthfull)]
+altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
+sce<-high_conf_calls(sce,pacpt=0.75)
+sce$truth<-gsub("K","Hashtag", sce$truth)
+
+system.time(data_h <-
+  foreach(i=seq_along(dvec), .combine='rbind') %:%
+    foreach(j=seq_along(nvec), .combine='cbind', .inorder=FALSE) %dopar% {
+      d<-dvec[i]
+      n<-nvec[j]
+      f1_k<-c()
+      for (k in seq_len(5)) {
+        sce<-reassign_balanced(sce, k=25, d=d, n=n, nmin=100)
+        l1<-unique(as.character(sce$truth))
+        l2<-unique(as.character(sce$knn_balanced))
+        lvls<-union(l1,l2)
+        cf<-confusionMatrix(factor(sce$truth,levels=lvls),factor(sce$knn_balanced,levels=lvls),mode = "prec_recall")
+        f1_k[k]<-cf$byClass[6,7]
+      }
+      f1<-mean(f1_k)
+    }
+)
+
+colnames(data_h)<-nvec
+rownames(data_h)<-dvec
+data_h
+library(ComplexHeatmap)
+Heatmap(data_h,cluster_rows = FALSE,cluster_columns = FALSE)
+
+
+````
+
+## key=a (low doublets)
+
+````{r}
+library(demuxSNP)
+key<-"a"
+seed<-"1"
+doub<-"5"
+
+#nvec<-seq(100,300,5)
+#dvec<-seq(20,200,5)
+bal1<-matrix(nrow=length(nvec),ncol=length(dvec))
+bal2<-matrix(nrow=length(nvec),ncol=length(dvec))
+path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
+load(path)
+sce<-sce[,!grepl("K2",sce$truthfull)]
+altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
+sce<-high_conf_calls(sce,pacpt=0.75)
+sce$truth<-gsub("K","Hashtag", sce$truth)
+
+system.time(data_a <-
+  foreach(i=seq_along(dvec), .combine='rbind') %:%
+    foreach(j=seq_along(nvec), .combine='cbind', .inorder=FALSE) %dopar% {
+      d<-dvec[i]
+      n<-nvec[j]
+      f1_k<-c()
+      for (k in seq_len(5)) {
+        sce<-reassign_balanced(sce, k=25, d=d, n=n, nmin=100)
+        l1<-unique(as.character(sce$truth))
+        l2<-unique(as.character(sce$knn_balanced))
+        lvls<-union(l1,l2)
+        cf<-confusionMatrix(factor(sce$truth,levels=lvls),factor(sce$knn_balanced,levels=lvls),mode = "prec_recall")
+        f1_k[k]<-cf$byClass[6,7]
+      }
+      f1<-mean(f1_k)
+      #acc<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+    }
+)
+
+colnames(data_a)<-nvec
+rownames(data_a)<-dvec
+data_a
+Heatmap(data_a,cluster_rows = FALSE,cluster_columns = FALSE)
+
+
+````
+
+````{r}
+#load(file = '../data/balanced_nd.rdata')
+library(ComplexHeatmap)
+library(circlize)
+bal1<-data_a
+bal2<-data_h
+col_fun = colorRamp2(c(0.6, 0.7, 0.8), c("blue", "white", "red"))
+lgd = Legend(col_fun = col_fun, title = "foo")
+h1<-Heatmap(bal1, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun, row_title = "d (proportions of n doublets simulated per between group pairing)", column_title = "n (rebalanced samples per singlet group)",
+        heatmap_legend_param = list(title = "f-score"),
+        row_title_side="left",
+        row_names_side = "left",
+        column_title_side = "bottom"
+        )
+h2<-Heatmap(bal2, cluster_columns = FALSE, cluster_rows = FALSE, col = col_fun, row_title = "d (proportion of n doublets simulated per between group pairing)", column_title = "n (rebalanced samples per singlet group)",
+        heatmap_legend_param = list(title = "f-score"),
+        row_title_side="left",
+        row_names_side = "left",
+        column_title_side = "bottom")
+
+draw(h1,column_title="demuxSNP doublet f-score as a function of n and d for 5% doublets")
+draw(h2,column_title="demuxSNP doublet f-score as a function of n and d for 40% doublets")
+rowMeans(bal1)
+rowMeans(bal2)
+````
+
+
+````{r}
+
+#define data
+df1 <- data.frame(n=nvec,d=dvec[max.col(t(bal1))])
+df2 <- data.frame(n=nvec,d=dvec[max.col(t(bal2))])
+df1$pc_doublets<-"5% doublets"
+df2$pc_doublets<-"45% doublets"
+df<-rbind(df1,df2)
+df$pc_doublets<-factor(df$pc_doublets,levels = c("5% doublets","45% doublets"))
+#create scatter plot with line of best fit
+ library(ggpubr)
+ggscatter(df, x = "n", y = "d",col="pc_doublets", add = "reg.line") +
+  facet_wrap(~pc_doublets) +
+  stat_regline_equation(label.x = 150, label.y = 1)
+````
+
+check differences between d=0.1n and 0.5n
+
+````{r}
+
+library(demuxSNP)
+keys<-letters[1:10]
+doubs<-seq(5,50,5)
+seed=1
+d_low<-0.1
+d_high<-0.7
+acc_low<-vector(mode="numeric", length=length(keys))
+acc_high<-vector(mode="numeric", length=length(keys))
+system.time(data_test_d <-
+    foreach(i=seq_along(keys), .combine='rbind', .inorder=FALSE) %dopar% {
+      key<-keys[i]
+      doub<-doubs[i]
+      path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
+      load(path)
+      sce<-sce[,!grepl("K2",sce$truthfull)]
+      altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
+      sce<-high_conf_calls(sce,pacpt=0.75)
+      sce$truth<-gsub("K","Hashtag", sce$truth)
+      
+      sce<-reassign_balanced(sce, k=25, d=d_low,nmin=100)
+      acc_low<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+      
+      sce<-reassign_balanced(sce, k=25, d=d_high,nmin=100)
+      acc_high<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+      d1<-data.frame(key=key,doublets=doub,accuracy=acc_high,d="high")
+      d2<-data.frame(key=key,doublets=doub,accuracy=acc_low,d="Low")
+      rbind(d1,d2)
+    }
+)
+
+data_test_d
+````
+
+````{r}
+library(ggpubr)
+data_test_d$d<-as.character(data_test_d$d)
+data_test_d$d<-recode(data_test_d$d,"Low"="0.1","high"="0.7")
+ggpar(ggline(data_test_d,x="doublets",y="accuracy",color="d"),ylim=c(0,1),main="Accuracy as a function of parameter d")
+
+
+````
+
+## Check dependence on k and d at max and min doublets
+
+````{r}
+library(demuxSNP)
+key<-"h"
+seed<-"2"
+doub<-"40"
+kvec<-seq(10,200,10)
+nvec<-seq(100,400,10)
+#bal1<-matrix(nrow=length(kvec),ncol=length(nvec))
+#bal2<-matrix(nrow=length(kvec),ncol=length(nvec))
+path<-paste("/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",key,"_",doub,"_",seed,"/",key,"_final_sce.rdata",sep="")
+load(path)
+sce<-sce[,!grepl("K2",sce$truthfull)]
+altExp(sce,"HTO")<-altExp(sce,"HTO")[!grepl("Hashtag2",rownames(altExp(sce,"HTO"))),]
+sce<-high_conf_calls(sce,pacpt=0.75)
+sce$truth<-gsub("K","Hashtag", sce$truth)
+
+system.time(d <-
+  foreach(i=seq_along(kvec), .combine='rbind') %:%
+    foreach(j=seq_along(nvec), .combine='cbind', .inorder=FALSE) %dopar% {
+      k<-kvec[i]
+      n<-nvec[j]
+      acc_l<-c()
+      for (l in seq_len(5)) {
+        sce<-reassign_balanced(sce, k=k, d=0.5, n=n, nmin=100)
+        acc_l[l]<-sum(sce$knn_balanced==sce$truth)/length(sce$truth)
+      }
+      acc<-mean(acc_l)
+      #data.frame(i=i,j=j,k=kvec[i],n=nvec[i],accuracy=acc)
+    }
+)
+
+colnames(d)<-nvec
+rownames(d)<-kvec
+d
+
+````
+
+````{r fig.height=7,fig.width=12}
+dd<-Heatmap(d,
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        column_title = "n (number of cells per group in rebalanced training data",
+        row_title = "k (nearest neighbours)",
+        heatmap_legend_param = list(title = 'accuracy'))
+draw(dd,column_title="Dependence of k on n")
+````
+````{r}
+
+df2 <- data.frame(n=nvec,k=kvec[max.col(t(d))])
+ggk<-ggscatter(df2,x="n",y="k", add = "reg.line") +
+  stat_regline_equation(label.x = 100, label.y = 100) +
+  ggtitle('Optimal k as a function of n')
+ggpar(ggk,ylim = c(0,150))
+````
+
+
+
+
+## HTOreader cross-tabulation
+
+````{r}
+
+load('../data/sce_app.rda')
+soup<-read.table('../data/clusters.tsv', header=TRUE)
+
+sce_app$soup<-soup$assignment
+sce_app$soup[soup$status=="doublet"]<-"Doublet"
+sce_app$soup[soup$status=="unassigned"]<-"unassigned"
+table(sce_app$soup)
+
+library(HTOreader)
+seurat_app<-as.Seurat(sce_app,data=NULL)
+seurat_app <- HTOClassification(seurat_app, assay = "HTO", method = "log")
+table(seurat_app$HTOid,seurat_app$soup)
+
+sce_app$htoreader<-seurat_app$HTOid
+
+
+levels_soup=c("2","3","4","5","1","6","Doublet","unassigned")
+levels_htoreader=c("Hashtag1","Hashtag2","Hashtag3","Hashtag4","Hashtag5","Hashtag6","Doublet","Negative")
+sce_app$soup<-factor(sce_app$soup,levels=levels_soup)
+sce_app$htoreader<-factor(sce_app$htoreader,levels=levels_htoreader)
+tab<-table(sce_app$htoreader,sce_app$soup)
+
+
+Heatmap(tab,cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        column_title="Souporcell labels",
+        row_title = "HTOreader labels",
+        column_names_side = "top",
+        row_names_side="left",
+        column_names_rot = -45,
+        name="n cells",
+        show_heatmap_legend = FALSE,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.rect(x = x, y = y, width = width, height = height, 
+            gp = gpar(col = "grey", fill = "white"))
+        if(i==j & i<8){
+        grid.rect(x = x, y = y, width = width, height = height, 
+            gp = gpar(col = "grey", fill = "green"))}
+        if(i==7 & j!=7){
+        grid.rect(x = x, y = y, width = width, height = height, 
+            gp = gpar(col = "grey", fill = "tomato"))}
+        # if(j==7 & i!=7){
+        # grid.rect(x = x, y = y, width = width, height = height, 
+        #     gp = gpar(col = "grey", fill = "tomato"))}
+        if(i==2 & j==2){
+        grid.rect(x = x, y = y, width = width, height = height, 
+            gp = gpar(col = "grey", fill = "red"))}
+        grid.text(sprintf("%.0f", tab[i, j]), x, y, gp = gpar(fontsize = 10))
+        if(i==7 & j==2){
+        grid.rect(x = x, y = y, width = width, height = height, 
+            gp = gpar(col = "grey", fill = "red"))}
+        grid.text(sprintf("%.0f", tab[i, j]), x, y, gp = gpar(fontsize = 10))
+        if(i==2 & j==4){
+        grid.rect(x = x, y = y, width = width, height = height, 
+            gp = gpar(col = "grey", fill = "red"))}
+        grid.text(sprintf("%.0f", tab[i, j]), x, y, gp = gpar(fontsize = 10))
+})
+
+````

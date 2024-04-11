@@ -19,16 +19,16 @@ plot_hashtag<-function(df, split=NULL,xlim=c(0,NA),ylim=c(0,NA),breaks=waiver())
       fill=dittoColors()[i]
     }
     else {
-      df$split<-split
+      df$split<-split[i,]
       fill="split"
     }
 
 
-    plotx<-gghistogram(df, x=tag, fill = fill, palette = "lancet", alpha=0.7) +
+    plotx<-gghistogram(df, x=tag, fill = fill, palette = c('#808080',dittoColors()[i]), alpha=0.7) +
       ylim(ylim) +
-      scale_x_continuous(breaks=breaks,limits=xlim)
+      scale_x_continuous(breaks=breaks,limits=xlim)+rremove('legend')
 
-    plots[[i]]<-plotx
+    plots[[i]]<-plotx+rremove('legend')
   }
   return(plots)
 }
