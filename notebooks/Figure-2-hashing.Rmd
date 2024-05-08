@@ -225,11 +225,20 @@ df_methods<-rbind(df_methods_high,df_methods_low)
 df_methods$pc_neg<-df_methods$pc_neg*100
 df_methods$method<-recode(df_methods$method,htodemux="HTODemux",bff_raw="BFF_raw",bff_cluster="BFF_cluster",gmm_demux="GMM-Demux",demuxsnp="demuxSNP")
 
-gg1<-ggbarplot(df_methods,x='method',y='accuracy',fill = 'data',position=position_dodge(),color = 'data',title='Overall accuracy between methods and high/low quality hashing',xlab='method',ylab='Overall CLassification Accuracy',label = TRUE,lab.nb.digits = 2)+ylim(0,1)
-gg2<-ggbarplot(df_methods,x='method',y='pc_neg',fill = 'data',position=position_dodge(),color = 'data' ,title='% negatives assigned between methods and high/low quality hashing', xlab='method', ylab='% hashing negatives')
+````
 
-ggpar(gg1,legend.title = "data quality")
-ggpar(gg2,legend.title = "data quality")
+
+
+````{r fig.height=3.5,fig.width=5}
+gg1<-ggbarplot(df_methods,x='method',y='accuracy',fill = 'data',position=position_dodge(),color = 'data',title='Overall classification accuracy',xlab='method',ylab='Accuracy',label = TRUE,lab.nb.digits = 2)+ylim(0,1) + rotate_x_text(angle=30)
+gg2<-ggbarplot(df_methods,x='method',y='pc_neg',fill = 'data',position=position_dodge(),color = 'data' ,title='% negatives', xlab='method', ylab='% hashing negatives',label=TRUE,lab.nb.digits = 1) + rotate_x_text(angle=30)
+
+gg_acc<-ggpar(gg1,legend.title = "data quality")
+gg_neg<-ggpar(gg2,legend.title = "data quality")
+
+ggarrange(gg_acc,gg_neg,common.legend=TRUE)
+
+ggbarplot(df_methods,x='method',y='accuracy',fill = 'data',position=position_dodge(),color = 'data',title='Overall classification accuracy',xlab='method',ylab='Accuracy',label = TRUE,lab.nb.digits = 2) + rotate_x_text(angle=30)+ylim(0,1)+ scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))+geom_hline(yintercept=0.91,  col = "black",lty=2,size=0.2)+geom_hline(yintercept=0.78,  col = "black",lty=2,size=0.2)
 ````
 
 

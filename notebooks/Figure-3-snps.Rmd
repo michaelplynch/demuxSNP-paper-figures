@@ -410,7 +410,16 @@ g1<-ggline(data=ccrcc_all, x="doublets", y="precision", linetype="method", xlab 
 g2<-ggline(data=ccrcc_all, x="doublets", y="recall", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="K2 Recall")
 
 ggarrange(ggpar(g1,ylim = c(0,1)),ggpar(g2,ylim=c(0,1)),common.legend = TRUE,ncol=1)
+````
 
+
+
+````{r fig.height=3.5,fig.width=8}
+
+h2_pr<-ggarrange(ggpar(g1,ylim = c(0,1)),ggpar(g2,ylim=c(0,1)),common.legend = TRUE,ncol=2)
+h2_pr
+ggsave(h2_pr,filename="../figures/hashtag2_pr.svg",device="svg",height=3,width=7)
+getwd()
 ````
 
 
