@@ -1,5 +1,5 @@
 ---
-title: "Figure-4-application"
+title: "sparse"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Figure-4-application}
