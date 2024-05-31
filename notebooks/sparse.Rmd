@@ -16,18 +16,12 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(demuxSNPpaperfigures)
-library(CiteFuse)
 library(viridisLite)
 library(dittoSeq)
 library(SingleCellExperiment)
 library(gridExtra)
 ```
 
-````{r}
-
-colors <- structure(viridis(n = 3), names = c("-1", "0", "1"))
-colors_hashtags <- structure(dittoColors()[1:8], names = c("Hashtag1", "Hashtag2", "Hashtag3","Hashtag4","Hashtag5","Hashtag6","Doublet","Negative"))
-````
 
 ````{r}
 
@@ -36,5 +30,63 @@ load("../data/sce_app.rda")
 ````
 
 
+````{r}
+library(Matrix)
+snps<-readMM('../data/v_outs_full.mtx')
+snps<-readMM('/home/m.lynch/pbmc_consensus_5pcsnps.mtx')
+snps<-snps[,]
+library(demuxSNP)
+altExp(sce_app,"HTO")<-as(altExp(sce_app,"HTO"),"SingleCellExperiment")
+sce_app<-high_conf_calls(sce_app)
+
+library(tsiMisc)
+
+snps_sub<-snps[,!grepl("multiplet|negative|uncertain",sce_app$labels)]
+snps_sub2<-snps_sub[rowSums(snps_sub)>1000,]
+response<-sce_app$labels[!grepl("multiplet|negative|uncertain",sce_app$labels)]
+
+superpca<-spca(x=t(snps_sub),y=response)
 
 
+````
+
+````{r}
+
+library(MASS)
+library(Matrix)
+library(demuxSNP)
+library(scater)
+library(ggpubr)
+
+snps<-readMM('../data/v_outs_full.mtx')
+altExp(sce_app,"HTO")<-as(altExp(sce_app,"HTO"),"SingleCellExperiment")
+sce_app<-high_conf_calls(sce_app)
+
+## subset to singlets
+train<-!grepl("uncertain|negative|multiplet",sce_app$labels)
+label<-droplevels(sce_app$labels[train])
+snps<-snps[,train]
+
+# run pca
+pca_res<-calculatePCA(snps)
+head(pca_res)
+df_pc<-data.frame(pca_res)
+df_pc$label<-label
+ggscatter(data=df_pc,x='PC1',y='PC2',fill = 'label',color = 'label')
+
+# run lda
+df_snps<-data.frame(t(as.matrix(snps[rowSums(snps)>0,])))
+df_snps$label<-label
+lda_res<-lda(label ~ .,df_snps,prior=rep(1/6,6))
+lda.values <- predict(lda_res)
+
+#ldahist(lda.values$x[,1], g = label)
+
+df_lda<-data.frame(lda.values$x)
+df_lda$label<-label
+ggscatter(df_lda,x="LD1",y="LD2",color = "label")
+
+library(plotly)
+plot_ly(x=df_lda$LD4, y=df_lda$LD2, z=df_lda$LD3, type="scatter3d", mode="markers", color=df_lda$label,size=0.1)
+
+````

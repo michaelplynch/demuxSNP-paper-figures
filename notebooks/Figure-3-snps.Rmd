@@ -531,7 +531,7 @@ df$Assignment<-recode(df$assignment,"TRUE"="correct","FALSE"="incorrect")
 alluvial<-ggplot(data = df,
        aes(axis1 = labels2, axis2 = soup_factor, y = Freq)) +
   geom_alluvium(aes(fill = Assignment)) +
-scale_fill_manual(values = c('correct' = "grey", 'incorrect' = "red")) +
+scale_fill_manual(values = c('correct' = "grey50", 'incorrect' = "red")) +
 #  guides(fill = "none") +
   geom_stratum()+
   geom_text(stat = "stratum",
@@ -554,7 +554,7 @@ df$Assignment<-recode(df$assignment,"TRUE"="correct","FALSE"="incorrect")
 alluvial<-ggplot(data = df,
        aes(axis1 = labels2, axis2 = ds_factor, y = Freq)) +
   geom_alluvium(aes(fill = Assignment)) +
-scale_fill_manual(values = c('correct' = "grey", 'incorrect' = "red")) +
+scale_fill_manual(values = c('correct' = "grey30", 'incorrect' = "red")) +
 #  guides(fill = "none") +
   geom_stratum()+
   geom_text(stat = "stratum",
