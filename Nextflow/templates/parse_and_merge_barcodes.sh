@@ -1,16 +1,10 @@
 #!/bin/bash
 
+# Script adapted from SNP simulation pipeline developed by L. Weber et al (2021) doi:10.1093/gigascience/giab062
+
 # --------------------------------------------------
 # Shell script to parse and merge cell barcode files
 # --------------------------------------------------
-
-# notes:
-# - parse cell barcode files to contain unique sample IDs matching BAM files
-# - there are 3 samples in HGSOC dataset, and 6 samples in lung dataset
-
-# runtime: seconds
-
-# qsub -V -cwd -l mem_free=10G,h_vmem=20G,h_fsize=100G parse_and_merge_barcodes.sh
 
 # arguments:
 # $1: tsv 1

@@ -1,15 +1,25 @@
+# ------------------------------------------------
+# Shell script to subset barcodes file
+# ------------------------------------------------
+
+# ------------------------------------------------
+# command line args
+# ------------------------------------------------
 # $1 barcodes file
 # $2 key
 # $5 number of cells for this hashtag
+
+# ------------------------------------------------
+# libraries
+# ------------------------------------------------
+library(tidyverse)
+library(magrittr)
 
 args <- commandArgs(trailingOnly = TRUE)
 barcodes<-args[1]
 key<-args[2]
 n<-args[3]
 hashtag<-args[4]
-
-library(tidyverse)
-library(magrittr)
 
 bcs<-read_table(barcodes, col_names = "barcode")
 print(length(bcs$barcode))

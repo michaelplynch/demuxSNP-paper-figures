@@ -1,17 +1,24 @@
-## script to carry out demuxSNP preprocessing steps
+# ------------------------------------------------
+## perform initial demuxSNP steps (filter SNPs)
+# ------------------------------------------------
 
-## inputs
-args <- commandArgs(trailingOnly = TRUE)
-vcf_path<-args[1]#c("/data/scratch/nextflow/data/genome1K.phase3.SNP_AF5e2.chr1toX.hg38.chr.vcf")
-sce_path<-args[2]#c("/home/m.lynch/Github/demuxSNP-paper-figures/sce_p.rds")
-key<-args[3]
-doublets<-args[4]
-seed<-args[5]
-##
-
+# ------------------------------------------------
+# Load libraries
+# ------------------------------------------------
 library(demuxSNP)
 library(DropletUtils)
 library(EnsDb.Hsapiens.v86)
+
+# ------------------------------------------------
+# command line inputs
+# ------------------------------------------------
+args <- commandArgs(trailingOnly = TRUE)
+vcf_path<-args[1]
+sce_path<-args[2]
+key<-args[3]
+doublets<-args[4]
+seed<-args[5]
+
 # load data
 load(sce_path)
 

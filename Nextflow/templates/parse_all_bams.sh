@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# arguments:
+# ------------------------------------------------
+# Shell script to parse six ccRCC bam files
+# ------------------------------------------------
+
+# arguments (currently ignored, hardcoded)
 # $1: input bam
 # $2: output bam
 # $3: short sample ID

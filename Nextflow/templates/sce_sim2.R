@@ -1,3 +1,10 @@
+# ------------------------------------------------
+# R script to simulated SingleCellExperiment object with % doublets
+# ------------------------------------------------
+
+# ------------------------------------------------
+# load libraries
+# ------------------------------------------------
 library(demuxSNPpaperfigures)
 library(dittoSeq)
 library(ggpubr)
@@ -8,12 +15,14 @@ library(Matrix)
 library(tidyverse)
 library(demuxSNP)
 
-
+# ------------------------------------------------
+# command lines args
+# ------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
-tenx_path<-args[1]#c('/data/projects/yufei/210827_10X_KW9275_bcl/cellranger-6.1.1/GRCh38/BRI-1348/outs/filtered_feature_bc_matrix')
-barcodes_path<-args[2]#c("/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_e.tsv")
-lookup_path<-args[3]#c("/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_e_25pc.tsv")
-key<-args[4]#c("e")
+tenx_path<-args[1]
+barcodes_path<-args[2]
+lookup_path<-args[3]
+key<-args[4]
 
 matrix<-readMM(paste(tenx_path,"/matrix.mtx.gz",sep=""))
 barcodes<-read.table(paste(tenx_path,"/barcodes.tsv.gz",sep=""))

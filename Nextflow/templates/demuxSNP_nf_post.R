@@ -1,15 +1,24 @@
-## post vartrix demuxSNP
+# ------------------------------------------------
+# demuxSNP steps post running vartrix
+# ------------------------------------------------
 
+# ------------------------------------------------
+# libraries
+# ------------------------------------------------
 library(demuxSNP)
 library(DropletUtils)
 library(EnsDb.Hsapiens.v86)
 library(Matrix)
 library(ComplexHeatmap)
 library(tidyverse)
+
+# ------------------------------------------------
+# command lines inputs
+# ------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
-sce_path<-args[1] #c("/home/m.lynch/Github/demuxSNP-paper-figures/sce_p.rds")
-snps_path<-args[2] #c("/home/m.lynch/out_matrix.mtx")
-barcodes_path<-args[3] #c("/data/scratch/nextflow/data_sub/barcodes_merged_pbmc_p_40pc.tsv")
+sce_path<-args[1]
+snps_path<-args[2]
+barcodes_path<-args[3]
 key<-args[4]
 doublets<-args[5]
 seed<-args[6]

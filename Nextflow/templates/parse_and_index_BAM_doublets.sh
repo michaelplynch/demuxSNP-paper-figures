@@ -1,27 +1,25 @@
 #!/bin/bash
 
+# Script adapted from SNP simulation pipeline developed by L. Weber et al (2021) doi:10.1093/gigascience/giab062
+
 #########################################
 # Shell script to run doublets simulation
 #########################################
 
 # This script runs part of the doublets simulation by:
 # (i) converting BAM to SAM
-# (ii) parsing through the merged SAM file to replace and combine some 
+# (ii) parsing through the merged SAM file to replace and combine some
 # percentage of cell barcodes
 # (iii) converting SAM back to BAM
 
-# The modifed BAM file can then be used by cellSNP and Vireo (or alternative 
+# The modifed BAM file can then be used by cellSNP and Vireo (or alternative
 # tools) in the following scripts.
 
 # Notes:
-# - lookup table to use in awk command (and updated list of cell barcodes) are 
+# - lookup table to use in awk command (and updated list of cell barcodes) are
 # generated in previous step with script "generate_awk_lookup_tables_doublets.R"
-# - for more details on how to use awk for multiple replacements see: 
+# - for more details on how to use awk for multiple replacements see:
 # https://stackoverflow.com/questions/14234907/replacing-values-in-large-table-using-conversion-table
-
-# runtime: ~1 day
-
-# qsub -V -cwd -l mem_free=2G,h_vmem=3G,h_fsize=100G parse_BAM_doublets.sh
 
 # arguments:
 # $1: directory for runtimes

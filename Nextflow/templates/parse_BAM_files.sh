@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Script adapted from SNP simulation pipeline developed by L. Weber et al (2021) doi:10.1093/gigascience/giab062
+
 # ------------------------------------------------------------------
 # Shell script to parse BAM files to add sample IDs to cell barcodes
 # ------------------------------------------------------------------
@@ -11,10 +13,6 @@
 # - using alternative separator | allows slashes in variable inside sed expression
 # - regular expression matches cell barcode with format "CB:Z:AACTTTCAGCGCTCCA-1"
 # - we replace the sample suffix "-1" with a unique sample ID, e.g. "-X2"
-
-# runtime: ~1-2 hours
-
-# qsub -V -cwd -l mem_free=10G,h_vmem=20G,h_fsize=100G parse_BAM_files.sh
 
 # arguments:
 # $1: input bam

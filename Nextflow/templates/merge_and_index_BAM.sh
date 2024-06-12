@@ -1,16 +1,10 @@
 #!/bin/bash
 
+# Script adapted from SNP simulation pipeline developed by L. Weber et al (2021) doi:10.1093/gigascience/giab062
+
 # ------------------------------------------------
 # Shell script to merge and index parsed BAM files
 # ------------------------------------------------
-
-# notes:
-# - BAM files from Cell Ranger are already position sorted, so do not need to sort
-# - there are 3 samples in HGSOC dataset, and 6 samples in lung dataset
-
-# runtime: ~4-6 hours
-
-# qsub -V -cwd -l mem_free=10G,h_vmem=20G,h_fsize=100G merge_and_index_BAM.sh
 
 # arguments:
 # $1: input bams
