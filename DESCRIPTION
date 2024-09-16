@@ -1,6 +1,6 @@
 Package: demuxSNPpaperfigures
 Title: Functions and scripts for demuxSNP paper figures
-Version: 0.0.0.9
+Version: 0.99.0
 Authors@R: 
     person("Michael", "Lynch", , "michael.lynch@ul.ie", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))

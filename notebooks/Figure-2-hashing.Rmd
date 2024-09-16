@@ -83,11 +83,11 @@ table(sce$truth)
 
 hto_low<-as.matrix(counts(altExp(sce,"HTO")))
 plot<-plot_hashtag(data.frame(t(log(hto_low+1))),xlim=c(0,10),ylim=c(0,2000),breaks=get_breaks(n=6,from=0,to=10))
-grid.arrange(grobs=plot,nrow=1,top=textGrob("Low quality hashing logcounts", gp=gpar(fontsize=20,font=8)))
+grid.arrange(grobs=plot,nrow=1,top=textGrob("Low quality hashing logcounts (natural log)", gp=gpar(fontsize=20,font=8)))
 
 hto_high<-as.matrix(counts(altExp(sce,"HTO_old")))
 plot<-plot_hashtag(data.frame(t(log(hto_high+1))),xlim=c(0,10),ylim=c(0,2000),breaks=get_breaks(n=6,from=0,to=10))
-grid.arrange(grobs=plot,nrow=1,top=textGrob("High quality hashing logcounts", gp=gpar(fontsize=20,font=8)))
+grid.arrange(grobs=plot,nrow=1,top=textGrob("High quality hashing logcounts (natural log)", gp=gpar(fontsize=20,font=8)))
 
 ````
 
@@ -230,7 +230,7 @@ df_methods$method<-recode(df_methods$method,htodemux="HTODemux",bff_raw="BFF_raw
 
 
 ````{r fig.height=3.5,fig.width=5}
-gg1<-ggbarplot(df_methods,x='method',y='accuracy',fill = 'data',position=position_dodge(),color = 'data',title='Overall classification accuracy',xlab='method',ylab='Accuracy',label = TRUE,lab.nb.digits = 2)+ylim(0,1) + rotate_x_text(angle=30)
+gg1<-ggbarplot(df_methods,x='method',y='accuracy',fill = 'data',position=position_dodge(),color = 'data',title='Overall classification\naccuracy',xlab='method',ylab='Accuracy',label = TRUE,lab.nb.digits = 2)+ylim(0,1) + rotate_x_text(angle=30)
 gg2<-ggbarplot(df_methods,x='method',y='pc_neg',fill = 'data',position=position_dodge(),color = 'data' ,title='% negatives', xlab='method', ylab='% hashing negatives',label=TRUE,lab.nb.digits = 1) + rotate_x_text(angle=30)
 
 gg_acc<-ggpar(gg1,legend.title = "data quality")
@@ -239,6 +239,8 @@ gg_neg<-ggpar(gg2,legend.title = "data quality")
 ggarrange(gg_acc,gg_neg,common.legend=TRUE)
 
 ggbarplot(df_methods,x='method',y='accuracy',fill = 'data',position=position_dodge(),color = 'data',title='Overall classification accuracy',xlab='method',ylab='Accuracy',label = TRUE,lab.nb.digits = 2) + rotate_x_text(angle=30)+ylim(0,1)+ scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))+geom_hline(yintercept=0.91,  col = "black",lty=2,size=0.2)+geom_hline(yintercept=0.78,  col = "black",lty=2,size=0.2)
+
+ggpar(gg_neg,ylim=c(0,36))
 ````
 
 

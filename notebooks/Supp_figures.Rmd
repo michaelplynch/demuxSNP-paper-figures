@@ -441,6 +441,7 @@ sce_app$soup[soup$status=="unassigned"]<-"unassigned"
 table(sce_app$soup)
 
 library(HTOreader)
+library(Seurat)
 seurat_app<-as.Seurat(sce_app,data=NULL)
 seurat_app <- HTOClassification(seurat_app, assay = "HTO", method = "log")
 table(seurat_app$HTOid,seurat_app$soup)
@@ -491,3 +492,385 @@ Heatmap(tab,cluster_rows = FALSE,
 })
 
 ````
+
+
+
+````{r}
+seurat_app$hybridID<-NULL
+seurat_app <- HTOClassification(seurat_app, assay = "HTO", method = "log")
+seurat_app<-HybridDemultiplexing(object=seurat_app,cellhashing_label = "HTOid",genotype_label = "soup",hto_names=paste0("Hashtag",1:6),snp_doublet_label = "Doublet",c_threshold = 0.6)
+
+table(seurat_app$HTOid,seurat_app$hybridID)
+table(seurat_app$HTOid,seurat_app$soup)
+````
+
+
+````{r}
+
+tab<-table(seurat_app$HTOid,seurat_app$hybridID)
+
+
+Heatmap(tab,cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        column_title="Souporcell labels",
+        row_title = "HTOreader labels",
+        column_names_side = "top",
+        row_names_side="left",
+        column_names_rot = -45,
+        name="n cells",
+        show_heatmap_legend = FALSE,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.rect(x = x, y = y, width = width, height = height, 
+            gp = gpar(col = "grey", fill = "white"))
+          grid.text(sprintf("%.0f", tab[i, j]), x, y, gp = gpar(fontsize = 10))
+})
+
+
+````
+
+
+## Supp. Figure 5.
+
+````{r}
+
+collect_demuxsnp <- function(ndoub, key, seed,ngenes) {
+  library(readr)
+  library(dplyr)
+  library(caret)
+  library(mclust)
+  n <- ndoub
+  #ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
+  df_full <- data.frame()
+  
+  for (i in seq_along(key)) {
+    ## ground truth
+    lookup <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        show_col_types = FALSE
+      )
+    doublet_barcodes <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        col_names = "barcode",
+        show_col_types = FALSE
+      )
+    label <- substr(doublet_barcodes$barcode,
+                    start = 18,
+                    stop = 19)
+    label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original, 18, 19) !=
+                                                             substr(lookup$replacement, 18, 19)]] <- "Doublet"
+    
+    ## demuxSNP results
+    for (j in seq_along(ngenes)) {
+      s <- seed[1]
+      demuxsnp <-
+        read.table(
+          file = paste(
+            "/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",
+            key[i],
+            "_",
+            n[i],
+            "_",
+            s,
+            "_ngenes_",
+            ngenes[j],
+            "/",
+            key[i],
+            "_demuxSNP.tsv",
+            sep = ""
+          ),
+          sep = ' ',
+          header = TRUE
+        )
+      
+      ds_reorder <-
+        demuxsnp$demuxSNP_centroid_nottrain[match(
+          substr(
+            doublet_barcodes$barcode,
+            start = 1,
+            stop = 16
+          ),
+          substr(demuxsnp$barcode, start = 1, stop = 16)
+        )]
+      ds_recode <- gsub("Hashtag", "K", ds_reorder)
+      #print(table(label))
+      print(table(label,ds_reorder))
+      ## evaluate performance
+      data = factor(ds_recode, levels = sort(union(ds_recode, label)))
+      ref = factor(label, levels = sort(union(ds_recode, label)))
+      ari <- adjustedRandIndex(data, ref)
+      acc <- accuracy_vec(data, ref)
+      cf <- confusionMatrix(data = data, reference = ref)
+      prec <- cf$byClass[3, 5]
+      rec <- cf$byClass[3, 6]
+      doublet_prec<-cf$byClass["Class: Doublet","Precision"]
+      doublet_rec<-cf$byClass["Class: Doublet", "Recall"]
+      doublet_acc<-proportions(table(data))["Doublet"]
+      doublet_meas<-proportions(table(ref))["Doublet"]
+      df <- data.frame(
+        key = key[i],
+        ngenes = ngenes[j],
+        doublets = n[i],
+        accuracy = acc,
+        ari = ari,
+        precision = prec,
+        recall = rec,
+        doublet_precison=doublet_prec,
+        doublet_rec= doublet_rec,
+        doublet_acc=doublet_acc,
+        doublet_meas=doublet_meas,
+        seed = s
+      )
+      df_full <- rbind(df_full, df)
+    }
+  }
+  return(df_full)
+}
+
+collect_soup <- function(ndoub, key, seed, ngenes) {
+  library(readr)
+  library(dplyr)
+  library(caret)
+  library(mclust)
+  n <- ndoub
+  df_full <- data.frame()
+  
+  for (i in seq_along(key)) {
+    ## ground truth
+    lookup <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        show_col_types = FALSE
+      )
+    doublet_barcodes <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        col_names = "barcode",
+        show_col_types = FALSE
+      )
+    label <- substr(doublet_barcodes$barcode,
+                    start = 18,
+                    stop = 19)
+    #label[doublet_barcodes$barcode %in% lookup$replacement]<-"Doublet"
+    label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original, 18, 19) !=
+                                                             substr(lookup$replacement, 18, 19)]] <-
+      "Doublet"
+    
+    ## souporcell results, looping through different seeds
+    for (j in seq_along(ngenes)) {
+      s <- seed[1]
+      souporcell <-
+        read.table(
+          file = paste(
+            "/data/projects/demuxSNP/nextflow/ccrcc_out/soup_",
+            key[i],
+            "_",
+            n[i],
+            "_",
+            s,
+            "_ngenes_",
+            ngenes[j],
+            "/clusters.tsv",
+            sep = ""
+          ),
+          sep = '\t',
+          header = TRUE
+        )
+      souporcell$assignment[souporcell$status == "doublet"] <-
+        "Doublet"
+      souporcell$assignment[souporcell$status == "unassigned"] <-
+        "unassigned"
+      
+      ## recode souporcell labels
+      t <- table(label, souporcell$assignment)
+      k <- t[grep("[0-9]", rownames(t)), grep("[0-9]", colnames(t))]
+      kp <- proportions(k + 1, 1)
+      
+      m <- max.col(kp)
+      vals <- kp[cbind(seq_along(m), m)]
+      m[which.min(vals)] <-
+        c(setdiff(seq_along(m), m[-c(which.min(vals))]))
+      
+      y <- rownames(kp)
+      z <- colnames(kp)[m]
+      w <- as.character(z)
+      names(w) <- as.character(y)
+      soup_new <- recode(souporcell$assignment,!!!setNames(y, z))
+      
+      print(table(label))
+      print(table(soup_new))
+      print(table(label, soup_new))
+      
+      ## evaluate performance
+      data = factor(soup_new, levels = sort(union(soup_new, label)))
+      ref = factor(label, levels = sort(union(soup_new, label)))
+      ari <- adjustedRandIndex(data, ref)
+      acc <- accuracy_vec(data, ref)
+      cf <- confusionMatrix(data = data, reference = ref)
+      prec <- cf$byClass[3, 5]
+      rec <- cf$byClass[3, 6]
+      doublet_prec<-cf$byClass["Class: Doublet","Precision"]
+      doublet_rec<-cf$byClass["Class: Doublet", "Recall"]
+      doublet_acc<-proportions(table(data))["Doublet"]
+      doublet_meas<-proportions(table(ref))["Doublet"]
+      df <- data.frame(
+        key = key[i],
+        ngenes = ngenes[j],
+        doublets = n[i],
+        accuracy = acc,
+        ari = ari,
+        precision = prec,
+        recall = rec,
+        doublet_precison=doublet_prec,
+        doublet_rec= doublet_rec,
+        doublet_acc=doublet_acc,
+        doublet_meas=doublet_meas,
+        seed = s
+      )
+      df_full <- rbind(df_full, df)
+    }
+  }
+  return(df_full)
+}
+
+````
+
+
+
+````{r}
+
+ndoub=25
+key='e'
+seed=1
+ngenes=c(50,75,100,500,1000,5000,10000)
+demuxsnp_ngenes<-collect_demuxsnp(ndoub,key,seed,ngenes)
+soup_ngenes<-collect_soup(ndoub,key,seed,ngenes)
+
+````
+
+````{r}
+
+list_of_files <- list.files(path = "/data/projects/demuxSNP/nextflow/ccrcc_out", recursive = TRUE,
+                            pattern = "runtime.txt", 
+                            full.names = TRUE)
+runtime<-c()
+for (i in seq_along(ngenes)) {
+ f<-fread(file=paste0('/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_e_25_1_ngenes_',
+            ngenes[i],
+            "/runtime.txt"))
+ runtime[i]<-f$V1
+}
+
+````
+
+
+````{r}
+
+demuxsnp_ngenes
+demuxsnp_ngenes$runtime<-runtime
+ggline(demuxsnp_ngenes,x='ngenes',y='accuracy',numeric.x.axis = TRUE)
+ggline(soup_ngenes,x='ngenes',y='accuracy',numeric.x.axis = TRUE)
+demuxsnp_ngenes
+demuxsnp_ngenes$runtime<-runtime
+ggline(demuxsnp_ngenes,x='ngenes',y='runtime',numeric.x.axis = TRUE)
+
+demuxsnp_ngenes$method='demuxSNP'
+demuxsnp_ngenes$runtime<-NULL
+soup_ngenes$method='souporcell'
+
+ngenes_all<-rbind(demuxsnp_ngenes,soup_ngenes)
+
+gg<-ggline(ngenes_all,x='ngenes',y='accuracy',color='method',palette=c('blue','black'),xlab='n top genes used to subset SNPs')
+ggpar(gg,ylim=c(0.8,1))
+````
+
+
+````{r}
+
+# Load necessary libraries
+library(ggplot2)
+library(ggpubr)
+
+# Create the dataframe
+df <- data.frame(
+  ngenes = c(50, 75, 100, 500, 1000, 5000, 10000),
+  accuracy = c(0.9229424, 0.9239916, 0.9248076, 0.9237585, 0.9208440, 0.9192119, 0.9186291),
+  runtime = c(5005, 5052, 6365, 12156, 14708, 19463, 20798)
+)
+
+# Adjust accuracy to match the scale of runtime
+df$accuracy_adjusted <- (df$accuracy - 0.9) * 200000  # Scale factor to match runtime
+
+# Create the plot using ggpubr
+p <- ggplot(df, aes(x = ngenes)) +
+  geom_line(aes(y = runtime), color = "blue", group = 1) +
+  geom_line(aes(y = accuracy_adjusted), color = "red", group = 1) +
+  scale_y_continuous(
+    name = "Runtime",
+    limits = c(0, max(df$runtime)),  # Set minimum runtime to zero
+    sec.axis = sec_axis(~ . / 200000 + 0.9, name = "Accuracy")  # Adjust back accuracy
+  ) +
+  theme_pubr() +
+  labs(x = "Number of Genes")
+
+# Print the plot
+print(p)
+
+````
+
+
+
+
+````{r}
+
+source('../../demuxSNP/R/reassign_centroid.R')
+
+agg<-cluster_modes(counts(altExp(sce,"SNPcons")),training_labels=sce$labels)
+jjj<-jaccard_weighted(agg,counts(altExp(sce,"SNPcons"))[,sce$hash.ID=="Negative"])
+
+dim(jjj)
+hm<-Heatmap(jjj,cluster_rows = FALSE,cluster_columns = FALSE,column_split=sce$knn_centroid[sce$hash.ID=="Negative"],show_column_names = FALSE,column_title_rot = -45,heatmap_legend_param = list(title="Jaccard\nDistance"))
+
+draw(hm,padding = unit(c(2, 15, 2, 2), "mm"),column_title='HTODemux Negative cells',row_title='Inferred singlet SNP profiles')
+````
+
+````{r}
+
+agg<-cluster_modes(counts(altExp(sce,"SNPcons")),training_labels=sce$labels)
+jjj<-jaccard_weighted(agg,counts(altExp(sce,"SNPcons"))[,sce$hash.ID=="Hashtag2"])
+
+dim(jjj)
+hm<-Heatmap(jjj,cluster_rows = FALSE,cluster_columns = FALSE,column_split=sce$knn_centroid[sce$hash.ID=="Hashtag2"],show_column_names = FALSE,column_title_rot = -45,heatmap_legend_param = list(title="Jaccard\nDistance"))
+draw(hm,padding = unit(c(2, 15, 2, 2), "mm"),column_title='HTODemux Hashtag2 cells',row_title='Inferred singlet SNP profiles')
+````
+
+

@@ -122,13 +122,10 @@ collect_soup <- function(ndoub, key, seed) {
       cf <- confusionMatrix(data = data, reference = ref)
       prec <- cf$byClass[3, 5]
       rec <- cf$byClass[3, 6]
-      # print(ari)
-      # ari_n[i]<-ari
-      # acc_n[i]<-acc
-      # recall_n[i]<-rec
-      # precision_n[i]<-prec
-      # print(key[i])
-      # res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
+      doublet_prec<-cf$byClass["Class: Doublet","Precision"]
+      doublet_rec<-cf$byClass["Class: Doublet", "Recall"]
+      doublet_acc<-proportions(table(data))["Doublet"]
+      doublet_meas<-proportions(table(ref))["Doublet"]
       df <- data.frame(
         key = key[i],
         doublets = n[i],
@@ -136,6 +133,10 @@ collect_soup <- function(ndoub, key, seed) {
         ari = ari,
         precision = prec,
         recall = rec,
+        doublet_precison=doublet_prec,
+        doublet_rec= doublet_rec,
+        doublet_acc=doublet_acc,
+        doublet_meas=doublet_meas,
         seed = s
       )
       df_full <- rbind(df_full, df)
@@ -143,8 +144,6 @@ collect_soup <- function(ndoub, key, seed) {
   }
   return(df_full)
 }
-
-
 
 collect_vireo <- function(ndoub, key, seed) {
   library(readr)
@@ -321,12 +320,117 @@ collect_demuxsnp <- function(ndoub, key, seed) {
           sep = ' ',
           header = TRUE
         )
-      #demuxsnp$demuxSNP[demuxsnp$demuxSNP=="negative"]<-"Doublet" ##remove when rerun
-      #demuxsnp$demuxSNP_balanced[demuxsnp$demuxSNP_jacc=="negative"]<-"Doublet" ##remove when rerun
-      t <- table(label, demuxsnp$demuxSNP)
       
       ds_reorder <-
-        demuxsnp$demuxSNP_balanced[match(
+        demuxsnp$demuxSNP_centroid_nottrain[match(
+          substr(
+            doublet_barcodes$barcode,
+            start = 1,
+            stop = 16
+          ),
+          substr(demuxsnp$barcode, start = 1, stop = 16)
+        )]
+      ds_recode <- gsub("Hashtag", "K", ds_reorder)
+      #print(table(label))
+      print(table(label,ds_reorder))
+      ## evaluate performance
+      data = factor(ds_recode, levels = sort(union(ds_recode, label)))
+      ref = factor(label, levels = sort(union(ds_recode, label)))
+      ari <- adjustedRandIndex(data, ref)
+      acc <- accuracy_vec(data, ref)
+      cf <- confusionMatrix(data = data, reference = ref)
+      prec <- cf$byClass[3, 5]
+      rec <- cf$byClass[3, 6]
+      doublet_prec<-cf$byClass["Class: Doublet","Precision"]
+      doublet_rec<-cf$byClass["Class: Doublet", "Recall"]
+      doublet_acc<-proportions(table(data))["Doublet"]
+      doublet_meas<-proportions(table(ref))["Doublet"]
+      df <- data.frame(
+        key = key[i],
+        doublets = n[i],
+        accuracy = acc,
+        ari = ari,
+        precision = prec,
+        recall = rec,
+        doublet_precison=doublet_prec,
+        doublet_rec= doublet_rec,
+        doublet_acc=doublet_acc,
+        doublet_meas=doublet_meas,
+        seed = s
+      )
+      df_full <- rbind(df_full, df)
+    }
+  }
+  return(df_full)
+}
+
+collect_htoreader <- function(ndoub, key, seed) {
+  library(readr)
+  library(dplyr)
+  library(caret)
+  library(mclust)
+  n <- ndoub
+  #ari_n<-c(); recall_n<-c();precision_n<-c();acc_n<-c()
+  df_full <- data.frame()
+  
+  for (i in seq_along(key)) {
+    ## ground truth
+    lookup <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/lookup_table_doublets_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        show_col_types = FALSE
+      )
+    doublet_barcodes <-
+      read_tsv(
+        paste(
+          "/data/projects/demuxSNP/nextflow/ccrcc_out/barcodes_merged_pbmc_",
+          key[i],
+          "_",
+          n[i],
+          "pc.tsv",
+          sep = ""
+        ),
+        col_names = "barcode",
+        show_col_types = FALSE
+      )
+    label <- substr(doublet_barcodes$barcode,
+                    start = 18,
+                    stop = 19)
+    label[doublet_barcodes$barcode %in% lookup$replacement[substr(lookup$original, 18, 19) !=
+                                                             substr(lookup$replacement, 18, 19)]] <- "Doublet"
+    
+    ## demuxSNP results
+    for (j in seq_along(seed)) {
+      s <- seed[j]
+      demuxsnp <-
+        read.table(
+          file = paste(
+            "/data/projects/demuxSNP/nextflow/ccrcc_out/demuxSNP_",
+            key[i],
+            "_",
+            n[i],
+            "_",
+            s,
+            "/",
+            key[i],
+            "_demuxSNP.tsv",
+            sep = ""
+          ),
+          sep = ' ',
+          header = TRUE
+        )
+      demuxsnp$htoreadermulti[demuxsnp$htoreadermulti=="doublet"]<-"Doublet"
+      t <- table(label, demuxsnp$htoreadermulti)
+      
+      ds_reorder <-
+        demuxsnp$htoreadermulti[match(
           substr(
             doublet_barcodes$barcode,
             start = 1,
@@ -345,13 +449,10 @@ collect_demuxsnp <- function(ndoub, key, seed) {
       cf <- confusionMatrix(data = data, reference = ref)
       prec <- cf$byClass[3, 5]
       rec <- cf$byClass[3, 6]
-      # print(ari)
-      # ari_n[i]<-ari
-      # acc_n[i]<-acc
-      # recall_n[i]<-rec
-      # precision_n[i]<-prec
-      # print(key[i])
-      # res<-list("ari"=ari_n,"recall"=recall_n,"precision"=precision_n,"acc"=acc_n)
+      doublet_prec<-cf$byClass["Class: Doublet","Precision"]
+      doublet_rec<-cf$byClass["Class: Doublet", "Recall"]
+      doublet_acc<-proportions(table(data))["Doublet"]
+      doublet_meas<-proportions(table(ref))["Doublet"]
       df <- data.frame(
         key = key[i],
         doublets = n[i],
@@ -359,6 +460,10 @@ collect_demuxsnp <- function(ndoub, key, seed) {
         ari = ari,
         precision = prec,
         recall = rec,
+        doublet_precison=doublet_prec,
+        doublet_rec= doublet_rec,
+        doublet_acc=doublet_acc,
+        doublet_meas=doublet_meas,
         seed = s
       )
       df_full <- rbind(df_full, df)
@@ -366,7 +471,6 @@ collect_demuxsnp <- function(ndoub, key, seed) {
   }
   return(df_full)
 }
-
 
 ````
 
@@ -385,34 +489,46 @@ ccrcc_soup <- collect_soup(ndoub = n,
 ccrcc_demuxsnp <- collect_demuxsnp(ndoub = n,
                            key = key,
                            seed = 1:5)
-
+ccrcc_htoreader <- collect_htoreader(ndoub=n,
+                                     key=key,
+                                     seed=1:5)
 ccrcc_soup$method<-"souporcell"
 #ccrcc_vireo$method<-"vireo"
 ccrcc_demuxsnp$method<-"demuxSNP"
-
-ccrcc_all<-rbind(ccrcc_soup,ccrcc_demuxsnp)
+ccrcc_htoreader$method<-"HTOreader_multi"
+ccrcc_all<-rbind(ccrcc_soup,ccrcc_demuxsnp,ccrcc_htoreader)
 ````
 
-````{r fig.height=5,fig.width=8}
+````{r fig.height=3.5,fig.width=9}
+pal<-c('blue','red','black')
+head(ccrcc_all)
+g1<-ggline(data=ccrcc_all, x="doublets", y="accuracy", linetype="method", xlab = "% doublets",color="method",palette = pal,add = "mean_sd",title="Accuracy",size=0.5)
+g2<-ggline(data=ccrcc_all, x="doublets", y="ari", linetype="method", xlab = "% doublets",color="method", palette=pal,add = "mean_sd",title="Adjusted Rand Index")
+
+ggarrange(ggpar(g1,ylim = c(0,1)),ggpar(g2,ylim=c(0,1)),common.legend = TRUE)
+
+
+````
+
+
+````{r fig.height=3.5,fig.width=9}
 
 head(ccrcc_all)
-g1<-ggline(data=ccrcc_all, x="doublets", y="accuracy", linetype="method", xlab = "% doublets",color="method",add = "mean_sd",title="Accuracy",size=0.5)
-g2<-ggline(data=ccrcc_all, x="doublets", y="ari", linetype="method", xlab = "% doublets",color="method",add = "mean_sd",title="Adjusted Rand Index",size=0.5)
+g1<-ggline(data=ccrcc_all, x="doublets", y="precision", linetype="method", xlab = "% doublets",color="method", palette=pal,add = "mean_se",title="K2 Precision")
+g2<-ggline(data=ccrcc_all, x="doublets", y="recall", linetype="method", xlab = "% doublets",color="method", palette=pal,add = "mean_se",title="K2 Recall")
 
-ggarrange(ggpar(g1,ylim = c(0.5,1)),ggpar(g2,ylim=c(0.5,1)),common.legend = TRUE)
+ggarrange(ggpar(g1,ylim = c(0,1)),ggpar(g2,ylim=c(0,1)),common.legend = TRUE,ncol=2)
 ````
 
-
-````{r fig.height=7,fig.width=4}
+````{r fig.width=9,fig.height=3.5}
 
 head(ccrcc_all)
-g1<-ggline(data=ccrcc_all, x="doublets", y="precision", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="K2 Precision")
-g2<-ggline(data=ccrcc_all, x="doublets", y="recall", linetype="method", xlab = "% doublets",color="method",add = "mean_se",title="K2 Recall")
+g1<-ggline(data=ccrcc_all, x="doublets", y="doublet_rec", linetype="method", xlab = "% doublets",color="method", palette=pal,add = "mean_sd",title="doublet recall",size=0.5)
+g2<-ggline(data=ccrcc_all, x="doublets", y="doublet_precison", linetype="method", xlab = "% doublets",color="method", palette=pal,add = "mean_sd",title="doublet precision",size=0.5)
 
-ggarrange(ggpar(g1,ylim = c(0,1)),ggpar(g2,ylim=c(0,1)),common.legend = TRUE,ncol=1)
+ggarrange(ggpar(g2,ylim = c(0,1)),ggpar(g1,ylim=c(0,1)),common.legend = TRUE)
+
 ````
-
-
 
 ````{r fig.height=3.5,fig.width=8}
 
@@ -588,4 +704,48 @@ DT$time<-DT$V1/60/60
 ggpar(ggbarplot(DT,x="method",y="time", add = c("mean_se", "jitter"),color="method",position=position_dodge()),ylim=c(0,max(DT$time)),ylab=c("time (h)"))
 ````
 
+## Doublets
+
+````{r}
+doub_gt<-dplyr::distinct(ccrcc_all,doublets,doublet_meas)
+doub_gt$method="Ground Truth"
+doub_gt$doublet_acc<-doub_gt$doublet_meas
+doub_gt$doublet_meas<-NULL
+df_doub_method<-rbind(
+  ccrcc_all[,c("doublets","doublet_acc","method")],
+  doub_gt
+)
+df_doub_method$doublet_acc_pc<-df_doub_method$doublet_acc*100
+gg<-ggline(df_doub_method,x="doublets",y=c("doublet_acc_pc"), linetype="method",color="method",palette=c('blue','grey','red','black'),add = "mean_sd",title="doublet precision",size=0.5,merge=TRUE,ylab = '% multisample doublets',xlab='% all doublets')
+ggpar(gg,ylim=c(0,40))
+````
+
+
+}
+````{r}
+
+ncells=seq(5000,50000,5000)
+ncells
+pc_doubs=ncells/1000
+n_doubs=pc_doubs*ncells/100
+plot(ncells,n_doubs)
+
+multi_2<-1/2*n_doubs
+multi_4<-3/4*n_doubs
+multi_6<-5/6*n_doubs
+
+
+
+df_doubs<-data.frame(ncells=ncells,n_doubs=n_doubs,multi_2=multi_2,multi_4=multi_4,multi_6=multi_6)
+head(df_doubs)
+ggline(df_doubs,x="ncells",y=c("n_doubs","multi_2","multi_4","multi_6"),merge = TRUE)
+````
+
+````{r}
+1/1:6
+df_multi<-data.frame(prop=c(1/1:6,1-c(1/1:6)),type=c(rep('SSM',6),rep('MSM',6)),multiplexedsamples=c(1:6,1:6))
+
+ggbarplot(df_multi,x='multiplexedsamples',y='prop',fill = 'type') + coord_flip()
+
+````
 
